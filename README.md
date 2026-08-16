@@ -31,6 +31,8 @@
 - `best_scores(player_id, period, period_start)` 기본키 + `greatest()` upsert
 - 구간은 `week`(월요일 시작)·`month`(1일 시작) 두 종류만 저장.
   **명예의전당은 지난달 `month` 버킷을 그대로 조회** (별도 저장 없음)
+- **주간은 아이디당 최신 1행만 유지** — 새 주 첫 제출 때 지난주 행 자동 삭제.
+  월간은 명예의전당 조회를 위해 매달 1행씩 유지
 - 구간 경계는 한국 시간(Asia/Seoul) 기준
 - 쓰기/읽기 모두 security definer 함수(`submit_score` / `get_ranking`)로만 접근
   (anon 직접 접근 차단 → player_id 비노출, 임의 update 차단)

@@ -11,6 +11,9 @@
 --    명예의전당(지난달)은 별도 구간이 아니라 "지난달 month 버킷"을 그대로 읽는다.
 --  * 점수 제출 시 이번주/이번달 두 버킷에 upsert하고, 기존 기록보다 낮은 점수는
 --    greatest()로 무시한다. → 같은 아이디가 같은 구간에 몇 번을 제출해도 행은 1개.
+--  * 주간은 이력이 필요 없으므로(랭킹은 항상 이번주만 조회) 아이디당 최신 1행만
+--    유지한다 — 새 주에 첫 제출할 때 그 아이디의 지난주 행을 자동 삭제.
+--    월간은 명예의전당(지난달 조회)용으로 매달 1행씩 계속 쌓인다.
 --  * 구간 경계는 한국 시간(Asia/Seoul) 기준. 클라이언트(월요일 시작 로컬 시간)와 일치.
 --  * best_scores는 anon이 직접 읽고 쓸 수 없고, 아래 security definer 함수로만
 --    접근한다 (player_id 노출 방지 + 임의 update 차단).
@@ -44,6 +47,7 @@ language sql stable as $$
 $$;
 
 -- 3) 점수 제출: 이번주/이번달 두 버킷에 upsert (낮은 점수는 무시) ------------
+--    ※ 이 함수만 바뀐 경우 이 블록만 다시 실행하면 된다 (create or replace).
 create or replace function submit_score(p_player_id uuid, p_nickname text, p_score bigint)
 returns void
 language plpgsql
@@ -54,6 +58,11 @@ begin
   if p_player_id is null or p_score is null or p_score <= 0 then
     return;
   end if;
+  -- 주간은 최신 1행만: 주가 바뀐 뒤 첫 제출에서 내 지난주 행을 정리
+  delete from best_scores
+   where player_id = p_player_id
+     and period = 'week'
+     and period_start < kst_week_start();
   insert into best_scores (player_id, nickname, score, period, period_start)
   values
     (p_player_id, left(btrim(coalesce(p_nickname, '')), 10), p_score, 'week',  kst_week_start()),
@@ -134,6 +143,8 @@ begin
       cross join (values ('week'), ('month')) as p(period)
       where s.score > 0
     ) x
+    -- 주간은 이번주 것만 (지난주 행은 어차피 조회되지 않는 죽은 데이터)
+    where x.period = 'month' or x.period_start = kst_week_start()
     order by pid, period, period_start, score desc
   ) best
   on conflict (player_id, period, period_start) do update
@@ -145,7 +156,8 @@ $migrate$;
 -- 이관을 확인했으면 기존 테이블은 삭제해도 됩니다 (클라이언트는 rpc만 사용):
 -- drop table if exists scores;
 --
--- 오래된 주간 버킷은 랭킹에서 다시 조회되지 않으므로 주기적으로 지워도 됩니다.
--- (월간 버킷은 명예의전당 이력이므로 남겨두는 것을 권장)
+-- 주간 행은 활동 중인 아이디라면 새 주 첫 제출 때 자동 정리됩니다.
+-- 발길을 끊은 아이디의 마지막 주간 행(아이디당 1개)만 남는데,
+-- 신경 쓰이면 아래를 가끔 실행하면 됩니다. (월간은 명예의전당 이력이므로 유지 권장)
 -- delete from best_scores
---  where period = 'week' and period_start < kst_week_start() - interval '8 weeks';
+--  where period = 'week' and period_start < kst_week_start();
