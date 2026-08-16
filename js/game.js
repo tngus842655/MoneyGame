@@ -532,7 +532,7 @@ function requestAdFeature(kind) {
   activePointerId = null;
   if (kind === 'revive') {
     // 게임오버 버튼 자체가 이미 "광고 보고 부활"이므로 확인 없이 바로 광고 재생
-    playTestAd();
+    playAd();
     return;
   }
   const coinLabel = mode.key === 'krw' ? '500원 이하 동전' : '25¢ 이하 동전';
@@ -550,7 +550,54 @@ function closeAd() {
   if (adCountdown) { clearInterval(adCountdown); adCountdown = null; }
   document.getElementById('adConfirm').classList.add('hidden');
   document.getElementById('adPlay').classList.add('hidden');
+  // 실광고 로딩 표시에서 바꾼 요소 원복
+  document.getElementById('adBox').classList.remove('hidden');
+  document.getElementById('adCount').classList.remove('hidden');
+  document.getElementById('adPlayMsg').textContent = '잠시 후 기능이 실행됩니다…';
   if (state === 'playing') playBgm();
+}
+
+// 토스 앱 안이면 실제 보상형 광고, 밖(일반 브라우저)이면 시뮬레이션 광고
+function playAd() {
+  if (!pendingAdAction) return;   // 확인 팝업 흐름 밖에서 불리면 무시
+  const bridge = window.TossAdsBridge;
+  if (bridge && bridge.rewardedAvailable()) playRewardedAd(bridge);
+  else playTestAd();
+}
+
+// 광고 시청 완료(userEarnedReward) 시에만 기능 실행 — 중간에 닫으면 사용 안 됨
+function playRewardedAd(bridge) {
+  pauseBgm();
+  document.getElementById('adConfirm').classList.add('hidden');
+  const adPlayEl = document.getElementById('adPlay');
+  document.getElementById('adBox').classList.add('hidden');
+  document.getElementById('adCount').classList.add('hidden');
+  document.getElementById('adPlayMsg').textContent = '📺 광고 불러오는 중…';
+  adPlayEl.classList.remove('hidden');
+  bridge.showRewarded({
+    onShow: () => adPlayEl.classList.add('hidden'),   // 네이티브 광고가 화면을 덮음
+    onFinish: (earned) => {
+      const action = pendingAdAction;
+      closeAd();
+      if (!earned) {
+        floatTexts.push({ x: W / 2, y: 320, text: '광고를 끝까지 보면 사용할 수 있어요', t: 0, life: 1600, size: 16, color: '#8a90a5' });
+        return;
+      }
+      blip(880, 0.12, 'triangle', 0.1);
+      if (action === 'revive') {
+        if (state === 'over' && !reviveUsed) doRevive();
+      } else if (state === 'playing' && action && featUses[action] > 0) {
+        featUses[action]--;
+        updateFeatUi();
+        if (action === 'shake') startShake();
+        else if (action === 'clean') cleanCoins();
+      }
+    },
+    onFail: () => {
+      closeAd();
+      floatTexts.push({ x: W / 2, y: 320, text: '광고를 불러오지 못했어요. 잠시 후 다시 시도해 주세요', t: 0, life: 1800, size: 15, color: '#8a90a5' });
+    },
+  });
 }
 
 function playTestAd() {
@@ -1207,7 +1254,7 @@ document.getElementById('btnFill').addEventListener('click', () => {
   else startFill();
 });
 document.getElementById('btnRevive').addEventListener('click', () => { ensureAudio(); requestAdFeature('revive'); });
-document.getElementById('btnAdOk').addEventListener('click', playTestAd);
+document.getElementById('btnAdOk').addEventListener('click', playAd);
 document.getElementById('btnAdCancel').addEventListener('click', closeAd);
 
 // 남은 횟수 배지 + 소진 시 빨간 비활성화
@@ -1261,13 +1308,17 @@ document.getElementById('comboTip').textContent =
   `🔥 ${COMBO_MS / 1000}초 안에 연달아 합치면 콤보! 콤보당 +10% 보너스 (최대 2배)`;
 
 // ---------------------------------------------------------------- canvas fit
-const BANNER_H = 62;   // 하단 배너 광고 영역 (60px + 여백)
 function fit() {
-  let s = Math.min(window.innerWidth / W, (window.innerHeight - BANNER_H) / H);
+  // 하단 배너 높이 실측: 자리표시자 60px / 토스 실배너 96px (+마진 2px)
+  const adEl = document.getElementById('adBanner');
+  const bannerH = (adEl.offsetHeight || 60) + 2;
+  let s = Math.min(window.innerWidth / W, (window.innerHeight - bannerH) / H);
   if (!isFinite(s) || s <= 0) s = 1;
   canvas.style.width = W * s + 'px';
   canvas.style.height = H * s + 'px';
-  document.getElementById('adBanner').style.width = W * s + 'px';
+  // 토스 실배너는 화면 너비 100%가 규격이라 CSS(.toss-banner)가 담당
+  if (document.body.classList.contains('toss-banner')) adEl.style.width = '';
+  else adEl.style.width = W * s + 'px';
   // backing store follows displayed size × current DPR (re-read: zoom/monitor changes)
   const bs = Math.min(3, s * (window.devicePixelRatio || 1));
   const bw = Math.round(W * bs), bh = Math.round(H * bs);

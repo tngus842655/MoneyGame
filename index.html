@@ -24,6 +24,11 @@
     display:flex; align-items:center; justify-content:center;
     font-size:13px; box-shadow:0 10px 40px rgba(30,60,100,.35);
   }
+  /* 토스 실배너 부착 시: 화면 너비 100% + 고정형 96px (앱인토스 문서 규격) */
+  body.toss-banner #adBanner {
+    width:100vw !important; height:96px; display:block;
+    border-radius:0; background:transparent; box-shadow:none; letter-spacing:0;
+  }
 
   /* floating buttons */
   #hud, #hudR { position:absolute; display:flex; flex-direction:column; gap:8px; line-height:normal; }
@@ -233,7 +238,7 @@
       <div class="sheet">
         <div id="adBox">📺 테스트 광고<span class="adSmall">TEST AD</span></div>
         <div id="adCount">3</div>
-        <p class="sub">잠시 후 기능이 실행됩니다…</p>
+        <p class="sub" id="adPlayMsg">잠시 후 기능이 실행됩니다…</p>
       </div>
     </div>
 
@@ -279,7 +284,9 @@
 
   <script src="lib/matter.min.js"></script>
   <script src="lib/supabase.min.js"></script>
+  <script src="lib/apps-in-toss.min.js"></script>
   <script src="js/supabase-init.js"></script>
+  <script src="js/toss-ads.js"></script>
   <script src="js/game.js"></script>
   <script src="js/ranking.js"></script>
 </body>
