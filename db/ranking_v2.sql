@@ -120,7 +120,21 @@ as $$
   where mine.player_id = p_player_id
 $$;
 
--- 6) 닉네임 변경: 기존 rename_player를 새 테이블 기준으로 교체 ---------------
+-- 6) 내 역대 최고 기록: 내 버킷들의 최댓값 ------------------------------------
+--    월간 버킷이 계속 남으므로 그 최댓값이 곧 역대 최고. 게임 내 '👑 최고'
+--    표시를 서버 기준으로 동기화할 때 사용. 기록이 없으면 0.
+--    ※ 추가 적용 시 이 블록과 아래 grant의 get_my_best 줄만 실행하면 된다.
+create or replace function get_my_best(p_player_id uuid)
+returns bigint
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(max(score), 0) from best_scores where player_id = p_player_id
+$$;
+
+-- 7) 닉네임 변경: 기존 rename_player를 새 테이블 기준으로 교체 ---------------
 create or replace function rename_player(p_player_id uuid, p_nickname text)
 returns void
 language sql
@@ -137,13 +151,15 @@ $$;
 revoke all on function submit_score(uuid, text, bigint) from public;
 revoke all on function get_ranking(text, uuid) from public;
 revoke all on function get_my_rank(text, uuid) from public;
+revoke all on function get_my_best(uuid) from public;
 revoke all on function rename_player(uuid, text) from public;
 grant execute on function submit_score(uuid, text, bigint) to anon, authenticated;
 grant execute on function get_ranking(text, uuid) to anon, authenticated;
 grant execute on function get_my_rank(text, uuid) to anon, authenticated;
+grant execute on function get_my_best(uuid) to anon, authenticated;
 grant execute on function rename_player(uuid, text) to anon, authenticated;
 
--- 7) (선택) 기존 scores 데이터 이관 ------------------------------------------
+-- 8) (선택) 기존 scores 데이터 이관 ------------------------------------------
 -- 쌓여 있는 행들을 주/월 버킷별 최고기록 1개씩으로 요약해 옮깁니다.
 -- player_id가 없는 옛 행은 닉네임을 시드로 한 고정 uuid로 묶습니다.
 -- scores 테이블이 이미 삭제됐으면 자동으로 건너뛰므로, 이 파일 전체를
@@ -179,7 +195,7 @@ begin
 end
 $migrate$;
 
--- 8) (선택) 정리 --------------------------------------------------------------
+-- 9) (선택) 정리 --------------------------------------------------------------
 -- 이관을 확인했으면 기존 테이블은 삭제해도 됩니다 (클라이언트는 rpc만 사용):
 -- drop table if exists scores;
 --

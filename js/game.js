@@ -180,6 +180,19 @@ try {
   best.usd = +localStorage.getItem('money-merge-best-usd') || 0;
 } catch (e) {}
 
+// '👑 최고' 표시를 서버(best_scores) 기준으로 동기화 — ranking.js가 로드 후
+// get_my_best를 조회해서 호출한다. 로컬 값은 응답 전/오프라인 표시용 캐시.
+window.applyServerBest = sv => {
+  sv = +sv || 0;
+  if (sv <= best.krw) return;
+  best.krw = sv;
+  try { localStorage.setItem('money-merge-best-krw', String(sv)); } catch (e) {}
+  // 판 도중 서버 값이 도착하면 새 기록(🎉) 판정 기준도 같이 올린다
+  if (state === 'playing' && mode && mode.key === 'krw' && !newRecord) {
+    roundStartBest = Math.max(roundStartBest, sv);
+  }
+};
+
 // ---------------------------------------------------------------- physics
 function initEngine() {
   engine = Engine.create();

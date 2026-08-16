@@ -93,6 +93,15 @@ const API = {
     return { rank: data[0].rank, score: data[0].score };
   },
 
+  // 서버 기준 내 역대 최고 기록 (월간 버킷들의 최댓값). 없으면 0.
+  async fetchMyBest() {
+    const sb = window.supabaseClient;
+    if (!sb) return 0;   // 목 모드
+    const { data, error } = await sb.rpc('get_my_best', { p_player_id: playerId() });
+    if (error) return 0;
+    return +data || 0;
+  },
+
   // 닉네임 변경 시 내가 남긴 과거 기록의 닉네임도 함께 갱신.
   // anon에 update 권한을 주지 않기 위해 security definer 함수(rename_player)를 호출한다.
   async renamePlayer(nickname) {
@@ -300,6 +309,11 @@ document.getElementById('btnNickCancel').addEventListener('click', closeNickEdit
 nickInput.addEventListener('keydown', e => { if (e.key === 'Enter') saveNick(); });
 
 refreshNickDisplays();
+
+// 시작 시 서버 기준 내 최고 기록을 조회해 게임 내 '👑 최고' 표시에 반영
+Promise.resolve(API.fetchMyBest()).then(v => {
+  if (v > 0 && typeof window.applyServerBest === 'function') window.applyServerBest(v);
+}).catch(() => {});
 
 // ================================================================ 외부 노출
 window.Ranking = {
