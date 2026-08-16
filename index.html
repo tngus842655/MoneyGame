@@ -81,6 +81,7 @@
   #btnMenu, #btnAdCancel, #btnNickCancel, #btnConfirmCancel { background:#9aa5c4; }
   #btnRevive { background:#67b984; }
 
+  .overlay .tip { font-size:12px; color:#8a90a5; }
   .chainBox { margin-top:2px; }
   .chainBox .cap { font-size:12px; font-weight:700; color:#8a90a5; margin-bottom:4px; }
   .chain { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:3px; max-width:min(360px, 94vw); }
@@ -200,6 +201,7 @@
         <p>같은 돈끼리 부딪히면 더 큰 돈이 돼요!<br>돈을 떨어뜨려서 제일 큰 돈을 만들어 보세요.</p>
         <button class="mode" data-mode="krw">▶️ 게임시작</button>
         <div class="chainBox"><div class="cap">돈 불리는 순서</div><div class="chain" id="chainKrw"></div></div>
+        <p class="tip" id="comboTip"></p>
       </div>
     </div>
 

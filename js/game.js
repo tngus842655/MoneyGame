@@ -1243,6 +1243,10 @@ function buildChain(elId, m) {
 }
 buildChain('chainKrw', MODES.krw);
 
+// 메뉴 콤보 안내 — 문구의 초 수가 COMBO_MS와 항상 일치하도록 여기서 채움
+document.getElementById('comboTip').textContent =
+  `🔥 ${COMBO_MS / 1000}초 안에 연달아 합치면 콤보! 콤보당 +10% 보너스 (최대 2배)`;
+
 // ---------------------------------------------------------------- canvas fit
 const BANNER_H = 62;   // 하단 배너 광고 영역 (60px + 여백)
 function fit() {
