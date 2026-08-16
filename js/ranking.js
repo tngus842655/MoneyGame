@@ -93,12 +93,14 @@ const API = {
     return { rank: data[0].rank, score: data[0].score };
   },
 
-  // 서버 기준 내 역대 최고 기록 (월간 버킷들의 최댓값). 없으면 0.
+  // 서버 기준 내 역대 최고 기록 (월간 버킷들의 최댓값).
+  // 성공하면 숫자(기록 없으면 0), 조회 자체가 불가하면 null — 호출자가
+  // "서버가 진짜 0이라고 답함"과 "응답을 못 받음"을 구분할 수 있게 한다.
   async fetchMyBest() {
     const sb = window.supabaseClient;
-    if (!sb) return 0;   // 목 모드
+    if (!sb) return null;   // 목 모드: 서버 없음
     const { data, error } = await sb.rpc('get_my_best', { p_player_id: playerId() });
-    if (error) return 0;
+    if (error) return null;
     return +data || 0;
   },
 
@@ -319,9 +321,11 @@ nickInput.addEventListener('keydown', e => { if (e.key === 'Enter') saveNick(); 
 
 refreshNickDisplays();
 
-// 시작 시 서버 기준 내 최고 기록을 조회해 게임 내 '👑 최고' 표시에 반영
+// 시작 시 서버 기준 내 최고 기록을 조회해 게임 내 최고 기록 기준에 반영.
+// 서버 응답이 있으면 값이 낮아도(0 포함) 그대로 전달 — 랭킹(DB)이 진실의 원천.
+// null(조회 실패/목 모드)일 때만 로컬 캐시를 그대로 둔다.
 Promise.resolve(API.fetchMyBest()).then(v => {
-  if (v > 0 && typeof window.applyServerBest === 'function') window.applyServerBest(v);
+  if (v !== null && typeof window.applyServerBest === 'function') window.applyServerBest(v);
 }).catch(() => {});
 
 // ================================================================ 외부 노출

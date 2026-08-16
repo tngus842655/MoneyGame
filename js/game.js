@@ -203,16 +203,21 @@ try {
   best.usd = +localStorage.getItem('money-merge-best-usd') || 0;
 } catch (e) {}
 
-// '👑 최고' 표시를 서버(best_scores) 기준으로 동기화 — ranking.js가 로드 후
-// get_my_best를 조회해서 호출한다. 로컬 값은 응답 전/오프라인 표시용 캐시.
+// 최고 기록을 서버(best_scores) 기준으로 동기화 — ranking.js가 로드 후
+// get_my_best를 조회해서 호출한다. 서버가 랭킹의 실제 기준이므로 응답이 오면
+// 로컬 캐시보다 우선한다 (DB에서 기록이 지워졌으면 낮아지는 것도 그대로 반영).
+// 조회 실패 시에는 아예 호출되지 않아 로컬 캐시가 유지된다 (오프라인 안전).
 window.applyServerBest = sv => {
   sv = +sv || 0;
-  if (sv <= best.krw) return;
-  best.krw = sv;
-  try { localStorage.setItem('money-merge-best-krw', String(sv)); } catch (e) {}
-  // 판 도중 서버 값이 도착하면 새 기록(🎉) 판정 기준도 같이 올린다
+  // 진행 중인 판에서 이미 얻은 점수 아래로는 내리지 않음 (방금 세운 기록 보호)
+  const floor = (state === 'playing' && mode && mode.key === 'krw') ? score : 0;
+  const next = Math.max(sv, floor);
+  if (next === best.krw) return;
+  best.krw = next;
+  try { localStorage.setItem('money-merge-best-krw', String(next)); } catch (e) {}
+  // 판 도중 도착하면 새 기록 판정 기준도 서버 값으로 재설정
   if (state === 'playing' && mode && mode.key === 'krw' && !newRecord) {
-    roundStartBest = Math.max(roundStartBest, sv);
+    roundStartBest = sv;
   }
 };
 
