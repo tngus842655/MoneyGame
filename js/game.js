@@ -797,7 +797,7 @@ function gameOver() {
   const overEl = document.getElementById('over');
   document.getElementById('finalScore').textContent = mode.format(score);
   document.getElementById('finalBest').textContent =
-    (newRecord ? '🎉 새 기록! ' : '👑 최고 기록 ') + mode.format(best[mode.key]);
+    (newRecord ? '🎉 새 기록! ' : '👑 이번주 최고 ') + mode.format(best[mode.key]);
   document.getElementById('btnRevive').classList.toggle('hidden', reviveUsed);
   if (window.Ranking) window.Ranking.refreshNickDisplays();
   setTimeout(() => {
