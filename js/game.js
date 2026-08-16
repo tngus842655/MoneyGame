@@ -1054,34 +1054,33 @@ function drawHeld(now) {
 function drawHud() {
   if (state === 'menu') return;
 
-  // score pill
-  const pw = 216, ph = 54, px = W / 2 - pw / 2, py = 10;
-  roundRect(ctx, px, py, pw, ph, 27);
-  ctx.fillStyle = 'rgba(247,143,179,0.95)'; ctx.fill();
-  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke();
+  // score pill — 금액만 표시. 최고 기록 갱신 중이면 (최고) 접두 + 금색 강조
+  const hudNow = performance.now();
+  const pw = 216, ph = 44, px = W / 2 - pw / 2, py = 10;
+  if (newRecord) {
+    const glow = 0.5 + 0.5 * Math.sin(hudNow / 180);
+    ctx.save();
+    ctx.shadowColor = `rgba(255,170,40,${0.35 + 0.45 * glow})`;
+    ctx.shadowBlur = 12 + 10 * glow;
+    roundRect(ctx, px, py, pw, ph, 22);
+    ctx.fillStyle = 'rgba(255,178,64,0.97)'; ctx.fill();
+    ctx.restore();
+    roundRect(ctx, px, py, pw, ph, 22);
+    ctx.lineWidth = 3; ctx.strokeStyle = `rgba(255,235,170,${0.6 + 0.4 * glow})`; ctx.stroke();
+  } else {
+    roundRect(ctx, px, py, pw, ph, 22);
+    ctx.fillStyle = 'rgba(247,143,179,0.95)'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke();
+  }
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = `700 12px ${FONT}`;
-  ctx.fillText('모은 돈', W / 2, py + 14);
   ctx.font = `800 21px ${FONT}`;
-  ctx.fillText(mode.format(score), W / 2, py + 36);
+  ctx.fillText((newRecord ? '(최고) ' : '') + mode.format(score), W / 2, py + ph / 2 + 1);
 
-  // best (이번 판에서 기록 갱신 중이면 강조)
-  if (newRecord) {
-    ctx.fillStyle = `rgba(224,96,138,${0.7 + 0.3 * Math.sin(performance.now() / 180)})`;
-    ctx.font = `800 12px ${FONT}`;
-    ctx.fillText('🎉 새 기록 ' + mode.format(best[mode.key]), W / 2, py + ph + 13);
-  } else {
-    ctx.fillStyle = 'rgba(110,120,145,0.85)';
-    ctx.font = `700 12px ${FONT}`;
-    ctx.fillText('👑 최고 ' + mode.format(best[mode.key]), W / 2, py + ph + 13);
-  }
-
-  const hudNow = performance.now();
   if (combo >= 2 && hudNow < comboExpires) {
     ctx.fillStyle = '#ff8c42';
     ctx.font = `800 15px ${FONT}`;
-    ctx.fillText(`🔥 ${combo} 콤보!`, W / 2, py + ph + 32);
+    ctx.fillText(`🔥 ${combo} 콤보!`, W / 2, py + ph + 16);
   }
   if (raining) {
     ctx.fillStyle = `rgba(224,96,138,${0.7 + 0.3 * Math.sin(hudNow / 120)})`;
@@ -1117,22 +1116,6 @@ function drawHud() {
     ctx.fillText(`⚠️ ${(remain / 1000).toFixed(1)}초`, W / 2, by - 11);
   }
 
-  // next preview — 토스 안에서는 우상단 네이티브 더보기(⋯)·닫기(X) 버튼을 피해
-  // 원을 아래로 내리고 '다음' 라벨도 원 아래에 그린다
-  const inToss = document.body.classList.contains('in-toss');
-  const nx = W - 46, ny = inToss ? 89 : 47;
-  ctx.beginPath(); ctx.arc(nx, ny, 30, 0, TAU);
-  ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fill();
-  ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(247,143,179,0.9)'; ctx.stroke();
-  ctx.fillStyle = '#8a90a5';
-  ctx.font = `700 11px ${FONT}`;
-  ctx.fillText('다음', nx, inToss ? ny + 44 : ny - 40);
-  const nDef = mode.tiers[queue[1]];
-  const sc = Math.min(1, 22 / halfW(nDef));
-  ctx.save();
-  ctx.translate(nx, ny); ctx.scale(sc, sc);
-  drawPiece(ctx, nDef);
-  ctx.restore();
 }
 
 function drawFx(dt) {

@@ -59,11 +59,10 @@
   }
 
   /* floating buttons */
-  #hud, #hudR { position:absolute; display:flex; flex-direction:column; gap:8px; line-height:normal; }
-  #hud  { top:10px; left:10px; }
-  #hudR { top:88px; right:10px; }
-  /* 토스 안: '다음' 미리보기가 네이티브 ⋯/X 버튼을 피해 내려오므로(game.js) 그 아래로 */
-  body.in-toss #hudR { top:136px; }
+  /* 좌우 버튼 열은 같은 높이에서 시작 — 토스 네이티브 ⋯/X(우상단, ~52px) 살짝 아래 */
+  #hud, #hudR { position:absolute; top:64px; display:flex; flex-direction:column; gap:8px; line-height:normal; }
+  #hud  { left:10px; }
+  #hudR { right:10px; }
   #hud button, #hudR button {
     position:relative; width:38px; height:38px; border-radius:50%; border:2px solid rgba(255,255,255,.9);
     background:rgba(255,255,255,.55); font-size:18px; cursor:pointer; touch-action:manipulation;
