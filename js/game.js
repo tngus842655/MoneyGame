@@ -1277,7 +1277,8 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) check
 const btnSfx = document.getElementById('btnSfx');
 const btnBgm = document.getElementById('btnBgm');
 function renderSoundBtns() {
-  btnSfx.textContent = sfxMuted ? '🔇' : '🔊';
+  // 꺼짐 표시는 두 버튼 모두 같은 빨간 빗금(CSS .mutedOff)으로 통일
+  btnSfx.classList.toggle('mutedOff', sfxMuted);
   btnBgm.classList.toggle('mutedOff', bgmMuted);
 }
 btnSfx.addEventListener('click', () => {
