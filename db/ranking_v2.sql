@@ -110,31 +110,40 @@ grant execute on function rename_player(uuid, text) to anon, authenticated;
 -- 6) (선택) 기존 scores 데이터 이관 ------------------------------------------
 -- 쌓여 있는 행들을 주/월 버킷별 최고기록 1개씩으로 요약해 옮깁니다.
 -- player_id가 없는 옛 행은 닉네임을 시드로 한 고정 uuid로 묶습니다.
--- 과거 데이터가 필요 없으면 이 블록은 건너뛰어도 됩니다.
-insert into best_scores (player_id, nickname, score, period, period_start)
-select player_id, nickname, score, period, period_start
-from (
-  select distinct on (pid, period, period_start)
-         pid as player_id, nickname, score, period, period_start
+-- scores 테이블이 이미 삭제됐으면 자동으로 건너뛰므로, 이 파일 전체를
+-- 몇 번이고 다시 실행해도 안전합니다.
+do $migrate$
+begin
+  if to_regclass('public.scores') is null then
+    raise notice 'scores 테이블이 없어 이관을 건너뜁니다 (이미 이관·삭제 완료)';
+    return;
+  end if;
+  insert into best_scores (player_id, nickname, score, period, period_start)
+  select player_id, nickname, score, period, period_start
   from (
-    select coalesce(s.player_id, md5('legacy:' || s.nickname)::uuid) as pid,
-           s.nickname, s.score, p.period,
-           case p.period
-             when 'week' then date_trunc('week',  (s.created_at at time zone 'Asia/Seoul'))::date
-             else             date_trunc('month', (s.created_at at time zone 'Asia/Seoul'))::date
-           end as period_start
-    from scores s
-    cross join (values ('week'), ('month')) as p(period)
-    where s.score > 0
-  ) x
-  order by pid, period, period_start, score desc
-) best
-on conflict (player_id, period, period_start) do update
-  set score = greatest(best_scores.score, excluded.score);
+    select distinct on (pid, period, period_start)
+           pid as player_id, nickname, score, period, period_start
+    from (
+      select coalesce(s.player_id, md5('legacy:' || s.nickname)::uuid) as pid,
+             s.nickname, s.score, p.period,
+             case p.period
+               when 'week' then date_trunc('week',  (s.created_at at time zone 'Asia/Seoul'))::date
+               else             date_trunc('month', (s.created_at at time zone 'Asia/Seoul'))::date
+             end as period_start
+      from scores s
+      cross join (values ('week'), ('month')) as p(period)
+      where s.score > 0
+    ) x
+    order by pid, period, period_start, score desc
+  ) best
+  on conflict (player_id, period, period_start) do update
+    set score = greatest(best_scores.score, excluded.score);
+end
+$migrate$;
 
 -- 7) (선택) 정리 --------------------------------------------------------------
--- 이관을 확인했으면 기존 테이블은 삭제해도 됩니다 (v1 폴백도 더는 필요 없을 때):
--- drop table scores;
+-- 이관을 확인했으면 기존 테이블은 삭제해도 됩니다 (클라이언트는 rpc만 사용):
+-- drop table if exists scores;
 --
 -- 오래된 주간 버킷은 랭킹에서 다시 조회되지 않으므로 주기적으로 지워도 됩니다.
 -- (월간 버킷은 명예의전당 이력이므로 남겨두는 것을 권장)

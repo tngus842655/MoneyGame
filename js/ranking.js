@@ -51,151 +51,55 @@ function refreshNickDisplays() {
   if (b) b.textContent = n;
 }
 
-// ================================================================ 기간 계산
-function startOfWeekISO() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() - (d.getDay() + 6) % 7);   // 월요일 시작
-  return d.toISOString();
-}
-function startOfMonthISO() {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString();
-}
-function prevMonthRange() {
-  const d = new Date();
-  return {
-    start: new Date(d.getFullYear(), d.getMonth() - 1, 1).toISOString(),
-    end: new Date(d.getFullYear(), d.getMonth(), 1).toISOString(),
-  };
-}
-
 // ================================================================ 데이터 어댑터
 // [Supabase 연동 지점]
 // window.supabaseClient 가 있으면 실데이터, 없으면 목데이터로 동작합니다.
 //
-// 저장 구조는 두 가지를 지원하며 서버 상태를 자동 감지해 전환합니다:
-//  - v2 (권장, db/ranking_v2.sql 적용 후): 아이디(player_id)당 주간/월간 버킷별
-//    최고기록 1행만 upsert. 판마다 행이 쌓이지 않고, 랭킹에 같은 사람이 중복으로
-//    올라오지 않는다. 명예의전당은 지난달 월간 버킷을 그대로 읽는다.
-//    쓰기/읽기 모두 security definer rpc(submit_score / get_ranking)로만 접근.
-//  - v1 (legacy): scores 테이블에 판마다 insert 후 기간 필터로 조회.
-// player_id 컬럼/함수 적용 여부 (null=미확인). 마이그레이션 전에도 게임이 멈추지 않도록 자동 감지.
-let playerIdSupported = null;
-const isMissingPlayerId = e =>
-  /player_id/i.test((e && (e.message || e.details || e.hint)) || '');
-
-// v2 스키마(best_scores + rpc) 적용 여부 (null=미확인). 함수가 없으면 v1로 자동 폴백.
-let v2Supported = null;
-const isMissingV2 = e =>
-  !!e && (e.code === 'PGRST202' || e.code === '42883' ||
-    /could not find the function|does not exist/i.test(e.message || ''));
+// 저장 구조 (db/ranking_v2.sql 필수 적용): 아이디(player_id)당 주간/월간 버킷별
+// 최고기록 1행만 upsert. 판마다 행이 쌓이지 않고, 랭킹에 같은 사람이 중복으로
+// 올라오지 않는다. 명예의전당은 지난달 월간 버킷을 그대로 읽는다.
+// 쓰기/읽기 모두 security definer rpc(submit_score / get_ranking)로만 접근.
 
 const API = {
   async fetchRanking(period) {   // 'week' | 'month' | 'hall'
     const sb = window.supabaseClient;
-    if (sb) {
-      // v2: 구간별 최고기록 테이블에서 조회 (내 행은 is_me로 표시)
-      if (v2Supported !== false) {
-        const { data, error } = await sb.rpc('get_ranking', { p_period: period, p_player_id: playerId() });
-        if (!error) {
-          v2Supported = true;
-          return (data || []).map(r => ({ nickname: r.nickname, score: r.score, me: r.is_me }));
-        }
-        if (!isMissingV2(error)) throw error;
-        v2Supported = false;   // 마이그레이션 전 → v1으로 계속
-      }
-      if (period === 'hall') {
-        const { start, end } = prevMonthRange();
-        const { data, error } = await sb.from('scores')
-          .select('nickname, score')
-          .gte('created_at', start).lt('created_at', end)
-          .order('score', { ascending: false })
-          .limit(100);
-        if (error) throw error;
-        return data;
-      }
-      const since = period === 'week' ? startOfWeekISO() : startOfMonthISO();
-      const { data, error } = await sb.from('scores')
-        .select('nickname, score')
-        .gte('created_at', since)
-        .order('score', { ascending: false })
-        .limit(100);
-      if (error) throw error;
-      return data;
-    }
-    return mockRanking(period);
+    if (!sb) return mockRanking(period);
+    // 구간별 최고기록 TOP 100 (내 행은 is_me로 표시)
+    const { data, error } = await sb.rpc('get_ranking', { p_period: period, p_player_id: playerId() });
+    if (error) throw error;
+    return (data || []).map(r => ({ nickname: r.nickname, score: r.score, me: r.is_me }));
   },
 
+  // 이번주/이번달 버킷에 upsert — 같은 판/같은 구간에 여러 번 제출돼도
+  // 아이디당 최고기록 1행만 남는다 (낮은 점수는 서버에서 무시).
+  // 목 모드에서는 저장할 곳이 없으므로 무시 (내 최고 기록은 localStorage 기준 표시)
   async submitScore(score) {
     if (!score || score <= 0) return;
     const sb = window.supabaseClient;
-    if (sb) {
-      // v2: 이번주/이번달 버킷에 upsert — 같은 판/같은 구간에 여러 번 제출돼도
-      // 아이디당 최고기록 1행만 남는다 (낮은 점수는 서버에서 무시).
-      if (v2Supported !== false) {
-        const { error } = await sb.rpc('submit_score', {
-          p_player_id: playerId(), p_nickname: myName(), p_score: score,
-        });
-        if (!error) { v2Supported = true; return; }
-        if (!isMissingV2(error)) throw error;
-        v2Supported = false;   // 마이그레이션 전 → v1으로 계속
-      }
-      const row = { nickname: myName(), score };
-      if (playerIdSupported !== false) row.player_id = playerId();
-      let { error } = await sb.from('scores').insert(row);
-      if (error && isMissingPlayerId(error)) {
-        // player_id 컬럼 마이그레이션 전이면 닉네임/점수만으로 재시도
-        playerIdSupported = false;
-        ({ error } = await sb.from('scores').insert({ nickname: row.nickname, score }));
-      } else if (!error) {
-        playerIdSupported = true;
-      }
-      if (error) throw error;
-    }
-    // 목 모드에서는 저장할 곳이 없으므로 무시 (내 최고 기록은 localStorage 기준으로 표시)
-  },
-
-  // 플레이 중 실시간 랭킹 반영용. v2(upsert)에서만 전송한다 —
-  // v1은 호출마다 행이 새로 쌓여서 게임오버/이탈 시에만 저장하는 게 맞다.
-  async submitScoreLive(score) {
-    if (!score || score <= 0) return;
-    const sb = window.supabaseClient;
-    if (!sb || v2Supported === false) return;
+    if (!sb) return;
     const { error } = await sb.rpc('submit_score', {
       p_player_id: playerId(), p_nickname: myName(), p_score: score,
     });
-    if (!error) v2Supported = true;
-    else if (isMissingV2(error)) v2Supported = false;
+    if (error) throw error;
   },
 
   // 닉네임 변경 시 내가 남긴 과거 기록의 닉네임도 함께 갱신.
   // anon에 update 권한을 주지 않기 위해 security definer 함수(rename_player)를 호출한다.
   async renamePlayer(nickname) {
     const sb = window.supabaseClient;
-    if (!sb || playerIdSupported === false) return;
-    const { error } = await sb.rpc('rename_player', { p_player_id: playerId(), p_nickname: nickname });
-    if (error) playerIdSupported = false;   // 함수/컬럼 미적용 상태면 이후 조용히 건너뜀
+    if (!sb) return;
+    await sb.rpc('rename_player', { p_player_id: playerId(), p_nickname: nickname });
   },
 
   // 탭 종료/백그라운드 전환처럼 페이지가 곧 죽을 수 있는 시점 전용.
-  // supabase-js의 일반 fetch는 언로드 중 취소될 수 있어, keepalive fetch로 REST를 직접 호출.
+  // supabase-js의 일반 fetch는 언로드 중 취소될 수 있어, keepalive fetch로
+  // rpc REST 엔드포인트를 직접 호출한다. upsert라 스냅샷이 여러 번 가도 1행 유지.
   submitScoreBeacon(score) {
     if (!score || score <= 0) return;
     const cfg = window.supabaseConfig;
     if (!cfg) return;   // 목 모드: 저장할 서버가 없음
-    let url, body;
-    if (v2Supported !== false) {
-      // v2: rpc upsert — 스냅샷이 여러 번 저장돼도 구간별 최고기록 1행만 남는다
-      url = `${cfg.url}/rest/v1/rpc/submit_score`;
-      body = { p_player_id: playerId(), p_nickname: myName(), p_score: score };
-    } else {
-      url = `${cfg.url}/rest/v1/scores`;
-      body = { nickname: myName(), score };
-      if (playerIdSupported !== false) body.player_id = playerId();
-    }
     try {
-      fetch(url, {
+      fetch(`${cfg.url}/rest/v1/rpc/submit_score`, {
         method: 'POST',
         keepalive: true,
         headers: {
@@ -203,7 +107,7 @@ const API = {
           'apikey': cfg.anonKey,
           'Authorization': `Bearer ${cfg.anonKey}`,
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ p_player_id: playerId(), p_nickname: myName(), p_score: score }),
       }).catch(() => {});
     } catch (e) {}
   },
@@ -372,7 +276,7 @@ window.Ranking = {
   setName,
   refreshNickDisplays,
   submitScore: score => Promise.resolve(API.submitScore(score)).catch(() => {}),
-  submitScoreLive: score => Promise.resolve(API.submitScoreLive(score)).catch(() => {}),
+  submitScoreLive: score => Promise.resolve(API.submitScore(score)).catch(() => {}),   // 실시간 반영도 같은 upsert
   submitScoreBeacon: score => API.submitScoreBeacon(score),
 };
 })();

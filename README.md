@@ -23,7 +23,7 @@
 `window.supabaseClient = supabase.createClient(URL, ANON_KEY)`를 설정하면
 (js/supabase-init.js) 자동으로 실데이터 모드로 전환됩니다.
 
-#### 저장 구조 v2 (권장) — `db/ranking_v2.sql`
+#### 저장 구조 — `db/ranking_v2.sql` (필수 마이그레이션)
 
 **아이디(player_id)당 주간/월간 버킷별 최고기록 1행만 upsert**하는 구조입니다.
 판마다/스냅샷마다 행이 쌓이지 않고, 랭킹 목록에 같은 사람이 중복으로 올라오지 않습니다.
@@ -35,15 +35,17 @@
 - 쓰기/읽기 모두 security definer 함수(`submit_score` / `get_ranking`)로만 접근
   (anon 직접 접근 차단 → player_id 비노출, 임의 update 차단)
 - `get_ranking`에 내 player_id를 넘기면 내 행에 `is_me`가 찍혀 목록에서 강조 표시
-- **실시간 반영**: 플레이 중 점수가 오르면 약 20초 간격으로 랭킹에 반영
-  (v2에서만 동작 — v1은 행이 쌓여서 게임오버/이탈 시에만 저장.
-  홈/다시하기/게임오버/탭 이탈 시에는 그 시점 점수가 즉시 저장됨)
+- **실시간 반영**: 플레이 중 점수가 오르면 약 20초 간격으로 랭킹에 반영.
+  홈/다시하기/게임오버/탭 이탈 시에는 그 시점 점수가 즉시 저장됨
 - 닉네임 변경은 `rename_player` 함수가 best_scores 기준으로 일괄 갱신
-- 기존 `scores` 데이터 이관 쿼리 포함 (선택)
+- 옛 `scores` 테이블 데이터 이관 쿼리 포함
+  (scores가 이미 삭제됐으면 자동으로 건너뛰므로 파일 전체 재실행에 안전)
 
 적용 방법: Supabase SQL Editor에 `db/ranking_v2.sql` 전체를 붙여넣어 실행.
-**적용 전에도 게임은 정상 동작합니다** — ranking.js가 함수 존재 여부를 자동
-감지해서, 없으면 기존 방식(v1: `scores` 테이블에 판마다 insert)으로 폴백합니다.
+클라이언트는 이 rpc들로만 저장/조회하므로 **마이그레이션이 필수**입니다.
+(rpc가 없으면 랭킹 저장·조회가 실패하고, 게임 플레이 자체는 정상 동작.
+`window.supabaseClient`가 아예 없으면 목데이터 모드로 동작)
+옛 `scores` 테이블은 더 이상 사용하지 않으므로 이관 확인 후 삭제해도 됩니다.
 
 ## 시스템
 
@@ -90,7 +92,7 @@ npx http-server -p 5317 -c-1 .
 
 - `index.html` — 페이지 셸, 오버레이 UI(시작/게임오버/재확인 팝업), 스타일
 - `js/game.js` — 게임 로직 전체 (물리, 합치기, 렌더링, 입력, 사운드/배경음악)
-- `js/ranking.js` — 랭킹 화면 + Supabase 어댑터 (v2/v1 자동 전환)
+- `js/ranking.js` — 랭킹 화면 + Supabase 어댑터 (rpc 기반)
 - `js/supabase-init.js` — Supabase 클라이언트 초기화
 - `db/ranking_v2.sql` — 랭킹 저장 구조 v2 마이그레이션 (Supabase SQL Editor용)
 - `public/bgm/puzzle.mp3` — 배경음악
