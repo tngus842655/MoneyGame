@@ -11,6 +11,7 @@ const FLOOR_TOP = H - 16;     // top edge of the floor
 const DROP_Y = 104;           // y where held piece hovers
 const LINE_Y = 165;           // game-over line
 const OVER_MS = 2000;         // 위험 상태가 이 시간 연속 유지되면 게임오버
+const COMBO_MS = 5000;        // 이 시간 안에 연달아 합치면 콤보 유지
 const SPAWN_TIERS = 4;        // droppable tiers (coins only)
 const SPAWN_WEIGHTS = [5, 3, 2, 1.2];
 const FONT = '"Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif';
@@ -287,10 +288,10 @@ function celebrateNewRecord() {
   sfx.record();
 }
 
-// 2.5초 안에 연달아 합치면 콤보 — 콤보당 +10% 보너스 (최대 +100%)
+// COMBO_MS 안에 연달아 합치면 콤보 — 콤보당 +10% 보너스 (최대 +100%)
 function mergeScore(value, now) {
   combo = now < comboExpires ? combo + 1 : 1;
-  comboExpires = now + 2500;
+  comboExpires = now + COMBO_MS;
   const bonus = combo > 1 ? Math.round(value * 0.1 * Math.min(combo - 1, 10)) : 0;
   const total = value + bonus;
   addScore(total);
