@@ -72,27 +72,39 @@ function prevMonthRange() {
 
 // ================================================================ 데이터 어댑터
 // [Supabase 연동 지점]
-// 1) supabase-js 로드 후 어디선가:  window.supabaseClient = supabase.createClient(URL, ANON_KEY)
-// 2) 테이블 스키마 예시:
-//      create table scores (
-//        id bigint generated always as identity primary key,
-//        nickname text not null,
-//        score bigint not null,
-//        created_at timestamptz not null default now()
-//      );
-//      create index scores_created_score on scores (created_at, score desc);
-// 3) window.supabaseClient 가 있으면 자동으로 실데이터를 쓰고, 없으면 목데이터로 동작합니다.
-//    ※ 같은 유저의 최고 기록만 남기려면 nickname unique + upsert 방식으로 바꾸거나
-//      뷰/rpc 로 dedupe 하는 걸 추천 (아래 쿼리는 단순 전체 삽입 기준).
+// window.supabaseClient 가 있으면 실데이터, 없으면 목데이터로 동작합니다.
+//
+// 저장 구조는 두 가지를 지원하며 서버 상태를 자동 감지해 전환합니다:
+//  - v2 (권장, db/ranking_v2.sql 적용 후): 아이디(player_id)당 주간/월간 버킷별
+//    최고기록 1행만 upsert. 판마다 행이 쌓이지 않고, 랭킹에 같은 사람이 중복으로
+//    올라오지 않는다. 명예의전당은 지난달 월간 버킷을 그대로 읽는다.
+//    쓰기/읽기 모두 security definer rpc(submit_score / get_ranking)로만 접근.
+//  - v1 (legacy): scores 테이블에 판마다 insert 후 기간 필터로 조회.
 // player_id 컬럼/함수 적용 여부 (null=미확인). 마이그레이션 전에도 게임이 멈추지 않도록 자동 감지.
 let playerIdSupported = null;
 const isMissingPlayerId = e =>
   /player_id/i.test((e && (e.message || e.details || e.hint)) || '');
 
+// v2 스키마(best_scores + rpc) 적용 여부 (null=미확인). 함수가 없으면 v1로 자동 폴백.
+let v2Supported = null;
+const isMissingV2 = e =>
+  !!e && (e.code === 'PGRST202' || e.code === '42883' ||
+    /could not find the function|does not exist/i.test(e.message || ''));
+
 const API = {
   async fetchRanking(period) {   // 'week' | 'month' | 'hall'
     const sb = window.supabaseClient;
     if (sb) {
+      // v2: 구간별 최고기록 테이블에서 조회 (내 행은 is_me로 표시)
+      if (v2Supported !== false) {
+        const { data, error } = await sb.rpc('get_ranking', { p_period: period, p_player_id: playerId() });
+        if (!error) {
+          v2Supported = true;
+          return (data || []).map(r => ({ nickname: r.nickname, score: r.score, me: r.is_me }));
+        }
+        if (!isMissingV2(error)) throw error;
+        v2Supported = false;   // 마이그레이션 전 → v1으로 계속
+      }
       if (period === 'hall') {
         const { start, end } = prevMonthRange();
         const { data, error } = await sb.from('scores')
@@ -119,6 +131,16 @@ const API = {
     if (!score || score <= 0) return;
     const sb = window.supabaseClient;
     if (sb) {
+      // v2: 이번주/이번달 버킷에 upsert — 같은 판/같은 구간에 여러 번 제출돼도
+      // 아이디당 최고기록 1행만 남는다 (낮은 점수는 서버에서 무시).
+      if (v2Supported !== false) {
+        const { error } = await sb.rpc('submit_score', {
+          p_player_id: playerId(), p_nickname: myName(), p_score: score,
+        });
+        if (!error) { v2Supported = true; return; }
+        if (!isMissingV2(error)) throw error;
+        v2Supported = false;   // 마이그레이션 전 → v1으로 계속
+      }
       const row = { nickname: myName(), score };
       if (playerIdSupported !== false) row.player_id = playerId();
       let { error } = await sb.from('scores').insert(row);
@@ -149,10 +171,18 @@ const API = {
     if (!score || score <= 0) return;
     const cfg = window.supabaseConfig;
     if (!cfg) return;   // 목 모드: 저장할 서버가 없음
-    const row = { nickname: myName(), score };
-    if (playerIdSupported !== false) row.player_id = playerId();
+    let url, body;
+    if (v2Supported !== false) {
+      // v2: rpc upsert — 스냅샷이 여러 번 저장돼도 구간별 최고기록 1행만 남는다
+      url = `${cfg.url}/rest/v1/rpc/submit_score`;
+      body = { p_player_id: playerId(), p_nickname: myName(), p_score: score };
+    } else {
+      url = `${cfg.url}/rest/v1/scores`;
+      body = { nickname: myName(), score };
+      if (playerIdSupported !== false) body.player_id = playerId();
+    }
     try {
-      fetch(`${cfg.url}/rest/v1/scores`, {
+      fetch(url, {
         method: 'POST',
         keepalive: true,
         headers: {
@@ -160,7 +190,7 @@ const API = {
           'apikey': cfg.anonKey,
           'Authorization': `Bearer ${cfg.anonKey}`,
         },
-        body: JSON.stringify(row),
+        body: JSON.stringify(body),
       }).catch(() => {});
     } catch (e) {}
   },

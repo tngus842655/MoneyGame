@@ -108,6 +108,17 @@ const sfx = {
   over: () => { [440, 350, 262].forEach((f, i) => blip(f, 0.22, 'sine', 0.12, 0.9, i * 0.18)); },
 };
 
+// 배경음악: 플레이 중에만 작게 깔림 (메뉴/게임오버/광고/백그라운드에서는 일시정지)
+const bgm = new Audio('public/bgm/puzzle.mp3');
+bgm.loop = true;
+bgm.volume = 0.15;   // 효과음을 가리지 않는 볼륨
+function playBgm() {
+  if (muted) return;
+  const p = bgm.play();
+  if (p && p.catch) p.catch(() => {});   // 자동재생 차단 등 실패는 조용히 무시
+}
+function pauseBgm() { bgm.pause(); }
+
 // ---------------------------------------------------------------- state
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
@@ -437,9 +448,44 @@ function doRevive() {
   canDrop = true;
   pendingNextAt = 0;
   state = 'playing';
+  playBgm();
   document.getElementById('over').classList.add('hidden');
   floatTexts.push({ x: W / 2, y: 320, text: '💪 부활!', t: 0, life: 1500, size: 28, color: '#e0608a' });
   sfx.jackpot();
+}
+
+// ---------------------------------------------------------------- ⚠️ 재확인 팝업 (다시하기/홈)
+// 플레이 중 HUD의 🔄/🏠 를 실수로 눌러 판이 날아가지 않도록 한 번 더 확인.
+// 팝업이 열린 동안은 광고 팝업처럼 물리·입력이 정지된다 (step에서 confirmOpen 체크).
+let confirmOpen = false;
+let pendingConfirmAction = null;   // 'restart' | 'home'
+
+function requestConfirm(kind) {
+  if (state !== 'playing') { doConfirmAction(kind); return; }   // 진행 중인 판이 없으면 바로 실행
+  if (adOpen || confirmOpen) return;
+  pendingConfirmAction = kind;
+  confirmOpen = true;
+  aiming = false;
+  activePointerId = null;
+  const texts = {
+    restart: { title: '🔄 다시하기', text: '지금 판을 처음부터 다시 시작할까요?\n진행 중인 점수는 사라져요!' },
+    home:    { title: '🏠 처음으로', text: '게임을 그만두고 첫 화면으로 나갈까요?\n진행 중인 점수는 사라져요!' },
+  };
+  document.getElementById('confirmTitle').textContent = texts[kind].title;
+  document.getElementById('confirmText').textContent = texts[kind].text;
+  document.getElementById('confirmDlg').classList.remove('hidden');
+}
+
+function closeConfirm() {
+  confirmOpen = false;
+  pendingConfirmAction = null;
+  document.getElementById('confirmDlg').classList.add('hidden');
+}
+
+function doConfirmAction(kind) {
+  finalizeAbandon(false);
+  if (kind === 'restart') { if (mode) startGame(mode.key); }
+  else goMenu();
 }
 
 // ---------------------------------------------------------------- 📺 광고 게이트
@@ -476,9 +522,11 @@ function closeAd() {
   if (adCountdown) { clearInterval(adCountdown); adCountdown = null; }
   document.getElementById('adConfirm').classList.add('hidden');
   document.getElementById('adPlay').classList.add('hidden');
+  if (state === 'playing') playBgm();
 }
 
 function playTestAd() {
+  pauseBgm();
   document.getElementById('adConfirm').classList.add('hidden');
   const adPlayEl = document.getElementById('adPlay');
   const countEl = document.getElementById('adCount');
@@ -525,6 +573,7 @@ function startGame(modeKey) {
   if (!engine) initEngine();
   resetBoard();
   state = 'playing';
+  playBgm();
   document.getElementById('menu').classList.add('hidden');
   document.getElementById('over').classList.add('hidden');
   document.getElementById('hud').classList.remove('hidden');
@@ -556,6 +605,7 @@ function resetBoard() {
   shakeUntil = 0;
   if (engine) { engine.gravity.x = 0; engine.gravity.y = 1; }
   closeAd();
+  closeConfirm();
   featUses = { shake: MAX_FEAT, clean: MAX_FEAT };
   reviveUsed = false;
   scoreSubmitted = false;
@@ -602,6 +652,7 @@ function checkGameOver(now, dt) {
 
 function gameOver() {
   state = 'over';
+  pauseBgm();
   sfx.over();
   if (!scoreSubmitted && window.Ranking) {
     scoreSubmitted = true;
@@ -634,8 +685,10 @@ function checkpointAbandon() {
 
 function goMenu() {
   state = 'menu';
+  pauseBgm();
   if (engine) for (const b of moneyBodies()) Composite.remove(engine.world, b);
   closeAd();
+  closeConfirm();
   document.getElementById('over').classList.add('hidden');
   document.getElementById('hud').classList.add('hidden');
   document.getElementById('hudR').classList.add('hidden');
@@ -966,7 +1019,7 @@ function drawFx(dt) {
 
 // ---------------------------------------------------------------- main loop
 function step(now, dt) {
-  if (adOpen) return;               // 광고 보는 동안 게임 일시정지
+  if (adOpen || confirmOpen) return;   // 광고/재확인 팝업 동안 게임 일시정지
   if (engine && state !== 'menu') {
     if (state === 'playing') updateShake(now);
     Engine.update(engine, dt);
@@ -1056,7 +1109,11 @@ window.addEventListener('pointercancel', e => {
 });
 window.addEventListener('blur', () => { aiming = false; activePointerId = null; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
-document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureAudio(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { pauseBgm(); return; }   // 백그라운드에서는 배경음악도 멈춤
+  ensureAudio();
+  if (state === 'playing' && !adOpen) playBgm();
+});
 
 // ---------------------------------------------------------------- buttons & menu
 document.querySelectorAll('#menu button.mode').forEach(btn => {
@@ -1064,8 +1121,14 @@ document.querySelectorAll('#menu button.mode').forEach(btn => {
 });
 document.getElementById('btnAgain').addEventListener('click', () => startGame(mode.key));
 document.getElementById('btnMenu').addEventListener('click', goMenu);
-document.getElementById('btnHome').addEventListener('click', () => { finalizeAbandon(false); goMenu(); });
-document.getElementById('btnRestart').addEventListener('click', () => { finalizeAbandon(false); if (mode) startGame(mode.key); });
+document.getElementById('btnHome').addEventListener('click', () => requestConfirm('home'));
+document.getElementById('btnRestart').addEventListener('click', () => requestConfirm('restart'));
+document.getElementById('btnConfirmOk').addEventListener('click', () => {
+  const a = pendingConfirmAction;
+  closeConfirm();
+  if (a) doConfirmAction(a);
+});
+document.getElementById('btnConfirmCancel').addEventListener('click', closeConfirm);
 
 // 탭 종료/새로고침 시에도 진행 중이던 점수를 잃지 않도록 저장.
 // visibilitychange(hidden)는 백그라운드 전환에서도 뜨므로 확정 짓지 않고 스냅샷만 남겨
@@ -1075,6 +1138,8 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) check
 document.getElementById('btnMute').addEventListener('click', function () {
   muted = !muted;
   this.textContent = muted ? '🔇' : '🔊';
+  if (muted) pauseBgm();
+  else if (state === 'playing' && !adOpen) playBgm();
 });
 const btnAuto = document.getElementById('btnAuto');
 try { autoDrop = localStorage.getItem('money-merge-auto') === '1'; } catch (e) {}

@@ -19,61 +19,28 @@
 
 ### Supabase 연동 (js/ranking.js)
 
-연동 전에는 목데이터로 UI가 동작합니다. 연동 방법:
+연동 전에는 목데이터로 UI가 동작합니다. supabase-js 로드 후
+`window.supabaseClient = supabase.createClient(URL, ANON_KEY)`를 설정하면
+(js/supabase-init.js) 자동으로 실데이터 모드로 전환됩니다.
 
-1. supabase-js 로드 후 `window.supabaseClient = supabase.createClient(URL, ANON_KEY)` 설정
-   → 자동으로 실데이터 모드로 전환됩니다.
-2. 테이블 스키마:
-   ```sql
-   create table scores (
-     id bigint generated always as identity primary key,
-     nickname text not null,
-     score bigint not null,
-     created_at timestamptz not null default now()
-   );
-   create index scores_created_score on scores (created_at, score desc);
-   ```
-3. 쿼리 매핑 (ranking.js `API` 참고):
-   - 이번주/이번달: `created_at >= 주/월 시작` + `order by score desc limit 1000`
-   - 명예의전당: 지난달 범위 + `limit 100`
-   - 게임오버 시 `scores`에 insert (닉네임은 localStorage `money-merge-nick`, 자동 생성)
-   - 같은 유저 최고 기록만 남기려면 nickname unique + upsert 또는 뷰로 dedupe 권장
+#### 저장 구조 v2 (권장) — `db/ranking_v2.sql`
 
-### 닉네임 변경 시 과거 기록 갱신 (선택 마이그레이션)
+**아이디(player_id)당 주간/월간 버킷별 최고기록 1행만 upsert**하는 구조입니다.
+판마다/스냅샷마다 행이 쌓이지 않고, 랭킹 목록에 같은 사람이 중복으로 올라오지 않습니다.
 
-닉네임은 각 점수 행에 그대로 저장되므로, 이름을 바꿔도 과거 기록은 옛 이름으로 남습니다.
-아래 마이그레이션을 적용하면 이름 변경 시 **내가 남긴 과거 기록의 닉네임도 함께 갱신**됩니다.
+- `best_scores(player_id, period, period_start)` 기본키 + `greatest()` upsert
+- 구간은 `week`(월요일 시작)·`month`(1일 시작) 두 종류만 저장.
+  **명예의전당은 지난달 `month` 버킷을 그대로 조회** (별도 저장 없음)
+- 구간 경계는 한국 시간(Asia/Seoul) 기준
+- 쓰기/읽기 모두 security definer 함수(`submit_score` / `get_ranking`)로만 접근
+  (anon 직접 접근 차단 → player_id 비노출, 임의 update 차단)
+- `get_ranking`에 내 player_id를 넘기면 내 행에 `is_me`가 찍혀 목록에서 강조 표시
+- 닉네임 변경은 `rename_player` 함수가 best_scores 기준으로 일괄 갱신
+- 기존 `scores` 데이터 이관 쿼리 포함 (선택)
 
-```sql
--- 1) 기기별 플레이어 식별자 (localStorage 'money-merge-pid' 와 매칭)
-alter table scores add column if not exists player_id uuid;
-create index if not exists scores_player_id on scores (player_id);
-
--- 2) player_id 는 남에게 노출되지 않도록 조회 대상에서 제외
-revoke select on scores from anon;
-grant select (id, nickname, score, created_at) on scores to anon;
-grant insert (nickname, score, player_id) on scores to anon;
-
--- 3) 본인 기록의 닉네임만 바꾸는 함수
---    (anon 에 update 권한을 주면 전체 랭킹을 덮어쓸 수 있으므로 함수로만 허용)
-create or replace function rename_player(p_player_id uuid, p_nickname text)
-returns void
-language sql
-security definer
-set search_path = public
-as $$
-  update scores
-     set nickname = left(btrim(p_nickname), 10)
-   where player_id = p_player_id
-     and btrim(p_nickname) <> '';
-$$;
-
-revoke all on function rename_player(uuid, text) from public;
-grant execute on function rename_player(uuid, text) to anon;
-```
-
-적용 전에도 게임은 정상 동작합니다 — `ranking.js`가 `player_id` 컬럼/함수가 없으면
-자동으로 감지해 기존 방식(닉네임+점수만 저장)으로 폴백합니다.
+적용 방법: Supabase SQL Editor에 `db/ranking_v2.sql` 전체를 붙여넣어 실행.
+**적용 전에도 게임은 정상 동작합니다** — ranking.js가 함수 존재 여부를 자동
+감지해서, 없으면 기존 방식(v1: `scores` 테이블에 판마다 insert)으로 폴백합니다.
 
 ## 시스템
 
@@ -111,10 +78,19 @@ npx http-server -p 5317 -c-1 .
 
 브라우저에서 `http://localhost:5317` 접속. (모바일 세로 화면에 최적화)
 
+## 배경음악
+
+`public/bgm/puzzle.mp3`가 플레이 중에만 작게(볼륨 0.15) 반복 재생됩니다.
+메뉴/게임오버/광고 재생 중/탭 백그라운드에서는 자동으로 멈추고, 🔊 음소거를 따릅니다.
+
 ## 구조
 
-- `index.html` — 페이지 셸, 오버레이 UI(시작/게임오버), 스타일
-- `js/game.js` — 게임 로직 전체 (물리, 합치기, 렌더링, 입력, 사운드)
+- `index.html` — 페이지 셸, 오버레이 UI(시작/게임오버/재확인 팝업), 스타일
+- `js/game.js` — 게임 로직 전체 (물리, 합치기, 렌더링, 입력, 사운드/배경음악)
+- `js/ranking.js` — 랭킹 화면 + Supabase 어댑터 (v2/v1 자동 전환)
+- `js/supabase-init.js` — Supabase 클라이언트 초기화
+- `db/ranking_v2.sql` — 랭킹 저장 구조 v2 마이그레이션 (Supabase SQL Editor용)
+- `public/bgm/puzzle.mp3` — 배경음악
 - `lib/matter.min.js` — Matter.js 0.20.0 (물리 엔진, 로컬 번들)
 
 ## 조작
@@ -123,6 +99,9 @@ npx http-server -p 5317 -c-1 .
 - 돈의 **중심**이 빨간 점선 위에 거의 멈춘 채 **2초 연속** 머물면 게임 오버.
   (위험해지면 점선 위에 ⚠️ 카운트다운 게이지가 표시되고, 선 아래로 내려가면 즉시 초기화)
 - 좌측 상단: 🔊 소리 / 🔄 다시하기 / 🏠 처음으로
+  - 🔄/🏠는 플레이 중 실수로 눌러도 판이 날아가지 않도록 **재확인 팝업**을 거칩니다
+    (팝업이 떠 있는 동안 게임 일시정지)
+  - 🔊는 효과음과 배경음악을 함께 켜고 끕니다
 - 우측: ⚡ 자동 드롭 토글 / 🌀 통 흔들기(광고) / 🧹 동전 제거(광고)
 
 ## 개발용 디버그 훅
