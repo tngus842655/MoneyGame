@@ -15,7 +15,12 @@
     --sar: env(safe-area-inset-right, 0px);
     --pill: 0px; /* 토스 네이티브 더보기(⋯)·닫기(X) 버튼을 피하는 우상단 여백 */
   }
-  body.in-toss { --pill: 52px; }
+  /* 토스 전체화면: 상태바 뒤 영역이 캔버스와 한 색으로 이어지게 배경을 맞추고
+     (전환은 game.js syncPageBg), 카드 모서리/그림자를 없애 화면 한 장처럼 보이게 */
+  body.in-toss { --pill: 52px; background:#d4edfb; }
+  body.in-toss canvas { border-radius:0; box-shadow:none; }
+  body.in-toss .overlay { border-radius:0; }
+  body.in-toss #adBanner { border-radius:0; box-shadow:none; }
   html, body { height:100%; overflow:hidden; }
   body {
     background:#9fc6e8;
@@ -30,7 +35,7 @@
      전체화면으로 커지므로, 중간 크기로 계산된 레이아웃이 잠깐 보이는 것을 가림.
      뷰포트가 안정되면 game.js가 hide 클래스를 붙이고 제거 */
   #splash {
-    position:fixed; inset:0; z-index:999; background:#9fc6e8;
+    position:fixed; inset:0; z-index:999; background:#d4edfb;
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px;
     transition:opacity .28s ease; line-height:normal;
   }
@@ -67,6 +72,8 @@
   }
   #hud button:active, #hudR button:active { transform:scale(.92); }
   #hudR button.on { background:#ffd76e; border-color:#fff; box-shadow:0 2px 8px rgba(230,170,40,.55); }
+  /* 배경음악 꺼짐 상태 */
+  #btnBgm.mutedOff { opacity:.45; filter:grayscale(1); }
   #hudR button.ad::after {
     content:'AD'; position:absolute; right:-5px; bottom:-4px;
     background:#ffcf3d; color:#7a5b00; font-size:9px; font-weight:800;
@@ -231,7 +238,8 @@
     <canvas id="game"></canvas>
 
     <div id="hud" class="hidden">
-      <button id="btnMute" title="소리">🔊</button>
+      <button id="btnSfx" title="효과음 켜기/끄기">🔊</button>
+      <button id="btnBgm" title="배경음악 켜기/끄기">🎵</button>
       <button id="btnHome" title="처음으로">🏠</button>
       <button id="btnRestart" title="다시하기">🔄</button>
     </div>

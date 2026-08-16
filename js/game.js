@@ -82,7 +82,12 @@ function halfW(def) { return def.kind === 'coin' ? def.r : def.w / 2; }
 function halfH(def) { return def.kind === 'coin' ? def.r : def.h / 2; }
 
 // ---------------------------------------------------------------- audio
-let audioCtx = null, muted = false;
+// 효과음/배경음악을 각각 켜고 끌 수 있게 분리 (localStorage로 기기별 유지)
+let audioCtx = null, sfxMuted = false, bgmMuted = false;
+try {
+  sfxMuted = localStorage.getItem('money-merge-mute-sfx') === '1';
+  bgmMuted = localStorage.getItem('money-merge-mute-bgm') === '1';
+} catch (e) {}
 function ensureAudio() {
   if (!audioCtx) {
     try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
@@ -91,7 +96,7 @@ function ensureAudio() {
   if (audioCtx && audioCtx.state !== 'running') audioCtx.resume();
 }
 function blip(freq, dur = 0.1, type = 'triangle', vol = 0.12, slide = 1, delay = 0) {
-  if (muted || !audioCtx || audioCtx.state !== 'running') return;
+  if (sfxMuted || !audioCtx || audioCtx.state !== 'running') return;
   const t = audioCtx.currentTime + delay;
   const o = audioCtx.createOscillator(), g = audioCtx.createGain();
   o.type = type;
@@ -113,9 +118,9 @@ const sfx = {
 // 배경음악: 플레이 중에만 작게 깔림 (메뉴/게임오버/광고/백그라운드에서는 일시정지)
 const bgm = new Audio('public/bgm/puzzle.mp3');
 bgm.loop = true;
-bgm.volume = 0.15;   // 효과음을 가리지 않는 볼륨
+bgm.volume = 0.08;   // 효과음이 묻히지 않게 배경음악은 더 작게 (0.15 → 0.08)
 function playBgm() {
-  if (muted) return;
+  if (bgmMuted) return;
   const p = bgm.play();
   if (p && p.catch) p.catch(() => {});   // 자동재생 차단 등 실패는 조용히 무시
 }
@@ -479,6 +484,7 @@ function doRevive() {
   canDrop = true;
   pendingNextAt = 0;
   state = 'playing';
+  syncPageBg('play');
   playBgm();
   document.getElementById('over').classList.add('hidden');
   floatTexts.push({ x: W / 2, y: 320, text: '💪 부활!', t: 0, life: 1500, size: 28, color: '#e0608a' });
@@ -659,10 +665,20 @@ function spawnBurst(x, y, n, colors) {
 }
 
 // ---------------------------------------------------------------- game flow
+// 토스 전체화면에서는 상태바 뒤 영역(body 배경)이 그대로 보이므로,
+// 캔버스 상단과 같은 색으로 맞춰야 화면이 한 장처럼 이어진다.
+// - play: 캔버스 하늘 그라데이션의 맨 위 색 (#b7dcf5, drawBackground)
+// - overlay: 메뉴/게임오버/랭킹 오버레이 색을 하늘 위에 합성한 색
+function syncPageBg(kind) {
+  if (!document.body.classList.contains('in-toss')) return;
+  document.body.style.background = kind === 'play' ? '#b7dcf5' : '#d4edfb';
+}
+
 function startGame(modeKey) {
   mode = MODES[modeKey];
   if (!engine) initEngine();
   resetBoard();
+  syncPageBg('play');
   // 지난 판/지난 세션에서 자동 드롭을 켜둔 채 시작하면 사용법을 한 번 상기
   if (autoDrop) {
     floatTexts.push({ x: W / 2, y: 300, text: '자동 드롭 ON — 꾹 누르고 있으면 계속 떨어져요', t: 0, life: 2000, size: 15, color: '#e8961e' });
@@ -761,7 +777,11 @@ function gameOver() {
     (newRecord ? '🎉 새 기록! ' : '👑 최고 기록 ') + mode.format(best[mode.key]);
   document.getElementById('btnRevive').classList.toggle('hidden', reviveUsed);
   if (window.Ranking) window.Ranking.refreshNickDisplays();
-  setTimeout(() => { if (state === 'over') overEl.classList.remove('hidden'); }, 600);
+  setTimeout(() => {
+    if (state !== 'over') return;
+    overEl.classList.remove('hidden');
+    syncPageBg('overlay');
+  }, 600);
 }
 
 // 재시작/홈/탭종료처럼 이번 판이 확실히 끝나는 이탈: 그 시점 점수를 확정 제출
@@ -793,6 +813,7 @@ function checkpointAbandon() {
 
 function goMenu() {
   state = 'menu';
+  syncPageBg('overlay');
   pauseBgm();
   if (engine) for (const b of moneyBodies()) Composite.remove(engine.world, b);
   closeAd();
@@ -1252,12 +1273,29 @@ document.getElementById('btnConfirmCancel').addEventListener('click', closeConfi
 // 다시 돌아와 이어하다 진짜 게임오버가 나면 최종 점수가 정상적으로 덮어 제출되게 한다.
 window.addEventListener('pagehide', () => finalizeAbandon(true));
 document.addEventListener('visibilitychange', () => { if (document.hidden) checkpointAbandon(); });
-document.getElementById('btnMute').addEventListener('click', function () {
-  muted = !muted;
-  this.textContent = muted ? '🔇' : '🔊';
-  if (muted) pauseBgm();
+// 효과음/배경음악 개별 토글
+const btnSfx = document.getElementById('btnSfx');
+const btnBgm = document.getElementById('btnBgm');
+function renderSoundBtns() {
+  btnSfx.textContent = sfxMuted ? '🔇' : '🔊';
+  btnBgm.classList.toggle('mutedOff', bgmMuted);
+}
+btnSfx.addEventListener('click', () => {
+  ensureAudio();
+  sfxMuted = !sfxMuted;
+  try { localStorage.setItem('money-merge-mute-sfx', sfxMuted ? '1' : '0'); } catch (e) {}
+  renderSoundBtns();
+  if (!sfxMuted) blip(660, 0.08, 'triangle', 0.1);   // 켜짐 확인음
+});
+btnBgm.addEventListener('click', () => {
+  ensureAudio();
+  bgmMuted = !bgmMuted;
+  try { localStorage.setItem('money-merge-mute-bgm', bgmMuted ? '1' : '0'); } catch (e) {}
+  renderSoundBtns();
+  if (bgmMuted) pauseBgm();
   else if (state === 'playing' && !adOpen) playBgm();
 });
+renderSoundBtns();
 const btnAuto = document.getElementById('btnAuto');
 try { autoDrop = localStorage.getItem('money-merge-auto') === '1'; } catch (e) {}
 btnAuto.classList.toggle('on', autoDrop);
