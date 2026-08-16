@@ -25,6 +25,19 @@
     user-select:none; -webkit-user-select:none;
   }
   #wrap { display:flex; flex-direction:column; align-items:center; }
+
+  /* 첫 로딩 스플래시 — 토스 웹뷰는 열리는 전환 동안 뷰포트가 작게 시작했다가
+     전체화면으로 커지므로, 중간 크기로 계산된 레이아웃이 잠깐 보이는 것을 가림.
+     뷰포트가 안정되면 game.js가 hide 클래스를 붙이고 제거 */
+  #splash {
+    position:fixed; inset:0; z-index:999; background:#9fc6e8;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px;
+    transition:opacity .28s ease; line-height:normal;
+  }
+  #splash .logo { font-size:56px; animation:splashPulse 1s ease-in-out infinite; }
+  #splash .name { font-size:18px; font-weight:800; color:#4a6b8c; }
+  #splash.hide { opacity:0; pointer-events:none; }
+  @keyframes splashPulse { 0%,100% { transform:scale(1); } 50% { transform:scale(1.12); } }
   #gameArea { position:relative; line-height:0; }
   canvas { display:block; touch-action:none; border-radius:12px 12px 0 0; box-shadow:0 10px 40px rgba(30,60,100,.35); }
 
@@ -212,6 +225,7 @@
 </style>
 </head>
 <body>
+  <div id="splash"><div class="logo">💰</div><div class="name">머니 게임</div></div>
   <div id="wrap">
     <div id="gameArea">
     <canvas id="game"></canvas>

@@ -1361,6 +1361,34 @@ function fit() {
 window.addEventListener('resize', fit);
 fit();
 
+// ---------------------------------------------------------------- 첫 로딩 스플래시 해제
+// 토스 웹뷰는 열리는 전환 동안 뷰포트가 작게 시작했다가 전체화면으로 커진다.
+// 그 중간 크기로 계산된 레이아웃이 잠깐 보이지 않도록 스플래시로 가리고,
+// 토스 안에서는 뷰포트 높이가 기기 화면 높이에 거의 도달(=전체화면 완료)하고
+// 크기가 연속 6프레임 동일해질 때까지 기다린다 (최소 0.25초, 최대 2.5초 안전망).
+(() => {
+  const splash = document.getElementById('splash');
+  if (!splash) return;
+  const inToss = document.body.classList.contains('in-toss');
+  const t0 = performance.now();
+  let lastW = -1, lastH = -1, stableFrames = 0;
+  function waitStable() {
+    const w = window.innerWidth, h = window.innerHeight;
+    if (w === lastW && h === lastH) stableFrames++;
+    else { stableFrames = 0; lastW = w; lastH = h; }
+    const fullscreen = !inToss || h >= (screen.height || 0) * 0.85;
+    const elapsed = performance.now() - t0;
+    if ((stableFrames >= 6 && elapsed >= 250 && fullscreen) || elapsed >= 2500) {
+      fit();   // 안정된 최종 크기로 한 번 더 계산해 두고 공개
+      splash.classList.add('hide');
+      setTimeout(() => splash.remove(), 350);
+      return;
+    }
+    requestAnimationFrame(waitStable);
+  }
+  requestAnimationFrame(waitStable);
+})();
+
 requestAnimationFrame(loop);
 
 // debug / automation hook
