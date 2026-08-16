@@ -72,8 +72,13 @@
   }
   #hud button:active, #hudR button:active { transform:scale(.92); }
   #hudR button.on { background:#ffd76e; border-color:#fff; box-shadow:0 2px 8px rgba(230,170,40,.55); }
-  /* 배경음악 꺼짐 상태 */
-  #btnBgm.mutedOff { opacity:.45; filter:grayscale(1); }
+  /* 배경음악 꺼짐 상태: 🔇처럼 빨간 빗금 표시 */
+  #btnBgm { position:relative; }
+  #btnBgm.mutedOff::after {
+    content:''; position:absolute; left:50%; top:50%; width:72%; height:3.5px;
+    background:#e0483e; border-radius:2px; box-shadow:0 0 0 1.5px rgba(255,255,255,.85);
+    transform:translate(-50%,-50%) rotate(45deg); pointer-events:none;
+  }
   #hudR button.ad::after {
     content:'AD'; position:absolute; right:-5px; bottom:-4px;
     background:#ffcf3d; color:#7a5b00; font-size:9px; font-weight:800;
