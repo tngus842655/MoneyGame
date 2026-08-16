@@ -3,7 +3,7 @@
 수박게임(스이카 게임) 방식의 돈 합치기 게임입니다.
 같은 돈끼리 부딪히면 더 큰 돈으로 합쳐져요.
 
-## 진화 순서
+## 돈 불리는 순서
 
 10원 → 50원 → 100원 → 500원 → 천원 → 오천원 → 만원 → 오만원
 
@@ -14,70 +14,51 @@
 
 홈 화면 우측 상단 🏆 버튼 → 랭킹 화면. 탭 3종:
 
-- **이번주 / 이번달**: 1~1000위. 1·2·3위는 금/은/동 배경 + 메달, 4~10위는 강조 카드.
+- **이번주 / 이번달**: TOP 100. 1·2·3위는 금/은/동 배경 + 메달, 4~10위는 강조 카드.
 - **명예의전당**: 지난달 TOP 100. 1~3위는 시상대(포디움), 4~10위 강조 카드, 11~100위 일반 리스트.
+- 상단에 닉네임과 **탭별 내 순위·점수** 표시. TOP 100 안이면 목록 위치로 바로 계산하고,
+  밖이면 `get_my_rank` 함수로 정확한 등수를 조회 (기록 없으면 "기록 없음").
 
 ### Supabase 연동 (js/ranking.js)
 
-연동 전에는 목데이터로 UI가 동작합니다. 연동 방법:
+연동 전에는 목데이터로 UI가 동작합니다. supabase-js 로드 후
+`window.supabaseClient = supabase.createClient(URL, ANON_KEY)`를 설정하면
+(js/supabase-init.js) 자동으로 실데이터 모드로 전환됩니다.
 
-1. supabase-js 로드 후 `window.supabaseClient = supabase.createClient(URL, ANON_KEY)` 설정
-   → 자동으로 실데이터 모드로 전환됩니다.
-2. 테이블 스키마:
-   ```sql
-   create table scores (
-     id bigint generated always as identity primary key,
-     nickname text not null,
-     score bigint not null,
-     created_at timestamptz not null default now()
-   );
-   create index scores_created_score on scores (created_at, score desc);
-   ```
-3. 쿼리 매핑 (ranking.js `API` 참고):
-   - 이번주/이번달: `created_at >= 주/월 시작` + `order by score desc limit 1000`
-   - 명예의전당: 지난달 범위 + `limit 100`
-   - 게임오버 시 `scores`에 insert (닉네임은 localStorage `money-merge-nick`, 자동 생성)
-   - 같은 유저 최고 기록만 남기려면 nickname unique + upsert 또는 뷰로 dedupe 권장
+#### 저장 구조 — `db/ranking_v2.sql` (필수 마이그레이션)
 
-### 닉네임 변경 시 과거 기록 갱신 (선택 마이그레이션)
+**아이디(player_id)당 주간/월간 버킷별 최고기록 1행만 upsert**하는 구조입니다.
+판마다/스냅샷마다 행이 쌓이지 않고, 랭킹 목록에 같은 사람이 중복으로 올라오지 않습니다.
 
-닉네임은 각 점수 행에 그대로 저장되므로, 이름을 바꿔도 과거 기록은 옛 이름으로 남습니다.
-아래 마이그레이션을 적용하면 이름 변경 시 **내가 남긴 과거 기록의 닉네임도 함께 갱신**됩니다.
+- `best_scores(player_id, period, period_start)` 기본키 + `greatest()` upsert
+- 구간은 `week`(월요일 시작)·`month`(1일 시작) 두 종류만 저장.
+  **명예의전당은 지난달 `month` 버킷을 그대로 조회** (별도 저장 없음)
+- **주간은 아이디당 최신 1행만 유지** — 새 주 첫 제출 때 지난주 행 자동 삭제.
+  월간은 명예의전당 조회를 위해 매달 1행씩 유지
+- 구간 경계는 한국 시간(Asia/Seoul) 기준
+- 쓰기/읽기 모두 security definer 함수(`submit_score` / `get_ranking`)로만 접근
+  (anon 직접 접근 차단 → player_id 비노출, 임의 update 차단)
+- `get_ranking`에 내 player_id를 넘기면 내 행에 `is_me`가 찍혀 목록에서 강조 표시
+- **실시간 반영**: 플레이 중 점수가 오르면 약 20초 간격으로 랭킹에 반영.
+  홈/다시하기/게임오버/탭 이탈 시에는 그 시점 점수가 즉시 저장됨
+- 닉네임 변경은 `rename_player` 함수가 best_scores 기준으로 일괄 갱신
+- 게임 내 **'👑 최고' 표시는 서버 기준** — 시작 시 `get_my_best`(내 버킷들의
+  최댓값)를 조회해 동기화. localStorage 값은 응답 전/오프라인 표시용 캐시
+- 옛 `scores` 테이블 데이터 이관 쿼리 포함
+  (scores가 이미 삭제됐으면 자동으로 건너뛰므로 파일 전체 재실행에 안전)
 
-```sql
--- 1) 기기별 플레이어 식별자 (localStorage 'money-merge-pid' 와 매칭)
-alter table scores add column if not exists player_id uuid;
-create index if not exists scores_player_id on scores (player_id);
-
--- 2) player_id 는 남에게 노출되지 않도록 조회 대상에서 제외
-revoke select on scores from anon;
-grant select (id, nickname, score, created_at) on scores to anon;
-grant insert (nickname, score, player_id) on scores to anon;
-
--- 3) 본인 기록의 닉네임만 바꾸는 함수
---    (anon 에 update 권한을 주면 전체 랭킹을 덮어쓸 수 있으므로 함수로만 허용)
-create or replace function rename_player(p_player_id uuid, p_nickname text)
-returns void
-language sql
-security definer
-set search_path = public
-as $$
-  update scores
-     set nickname = left(btrim(p_nickname), 10)
-   where player_id = p_player_id
-     and btrim(p_nickname) <> '';
-$$;
-
-revoke all on function rename_player(uuid, text) from public;
-grant execute on function rename_player(uuid, text) to anon;
-```
-
-적용 전에도 게임은 정상 동작합니다 — `ranking.js`가 `player_id` 컬럼/함수가 없으면
-자동으로 감지해 기존 방식(닉네임+점수만 저장)으로 폴백합니다.
+적용 방법: Supabase SQL Editor에 `db/ranking_v2.sql` 전체를 붙여넣어 실행.
+클라이언트는 이 rpc들로만 저장/조회하므로 **마이그레이션이 필수**입니다.
+(rpc가 없으면 랭킹 저장·조회가 실패하고, 게임 플레이 자체는 정상 동작.
+`window.supabaseClient`가 아예 없으면 목데이터 모드로 동작)
+옛 `scores` 테이블은 더 이상 사용하지 않으므로 이관 확인 후 삭제해도 됩니다.
 
 ## 시스템
 
-- **콤보**: 2.5초 안에 연달아 합치면 콤보가 쌓이고, 콤보당 +10% 보너스 점수 (최대 +100%)
+- **콤보**: 5초 안에 연달아 합치면 콤보가 쌓이고, 콤보당 +10% 보너스 점수 (최대 +100%)
+- **🎉 최고 기록 갱신 알림**: 판 도중 최고 기록을 처음 넘어서는 순간 팡파레 사운드와
+  파티클, "최고 기록 갱신!" 문구가 뜨고, 상단 최고 기록 표시가 깜빡이는
+  "🎉 새 기록"으로 바뀝니다 (한 판에 한 번)
 - **⚡ 자동 드롭**: 우측 ⚡ 토글을 켜면, 길게 누르고 있는 동안 자동으로 계속 떨어집니다
 - **⏩ 자동 진행**: 누르면 동전들이 랜덤 위치로 빠르게 쏟아지며, 더미가 공간 높이의
   4/5에 닿을 때까지 자동으로 진행됩니다. 진행 중에 한 번 더 누르면 취소됩니다.
@@ -111,10 +92,19 @@ npx http-server -p 5317 -c-1 .
 
 브라우저에서 `http://localhost:5317` 접속. (모바일 세로 화면에 최적화)
 
+## 배경음악
+
+`public/bgm/puzzle.mp3`가 플레이 중에만 작게(볼륨 0.15) 반복 재생됩니다.
+메뉴/게임오버/광고 재생 중/탭 백그라운드에서는 자동으로 멈추고, 🔊 음소거를 따릅니다.
+
 ## 구조
 
-- `index.html` — 페이지 셸, 오버레이 UI(시작/게임오버), 스타일
-- `js/game.js` — 게임 로직 전체 (물리, 합치기, 렌더링, 입력, 사운드)
+- `index.html` — 페이지 셸, 오버레이 UI(시작/게임오버/재확인 팝업), 스타일
+- `js/game.js` — 게임 로직 전체 (물리, 합치기, 렌더링, 입력, 사운드/배경음악)
+- `js/ranking.js` — 랭킹 화면 + Supabase 어댑터 (rpc 기반)
+- `js/supabase-init.js` — Supabase 클라이언트 초기화
+- `db/ranking_v2.sql` — 랭킹 저장 구조 v2 마이그레이션 (Supabase SQL Editor용)
+- `public/bgm/puzzle.mp3` — 배경음악
 - `lib/matter.min.js` — Matter.js 0.20.0 (물리 엔진, 로컬 번들)
 
 ## 조작
@@ -122,7 +112,10 @@ npx http-server -p 5317 -c-1 .
 - 좌우로 움직여 위치를 정하고, 손을 떼면(클릭하면) 돈이 떨어집니다.
 - 돈의 **중심**이 빨간 점선 위에 거의 멈춘 채 **2초 연속** 머물면 게임 오버.
   (위험해지면 점선 위에 ⚠️ 카운트다운 게이지가 표시되고, 선 아래로 내려가면 즉시 초기화)
-- 좌측 상단: 🔊 소리 / 🔄 다시하기 / 🏠 처음으로
+- 좌측 상단: 🔊 소리 / 🏠 처음으로 / 🔄 다시하기
+  - 🔄/🏠는 플레이 중 실수로 눌러도 판이 날아가지 않도록 **재확인 팝업**을 거칩니다
+    (팝업이 떠 있는 동안 게임 일시정지)
+  - 🔊는 효과음과 배경음악을 함께 켜고 끕니다
 - 우측: ⚡ 자동 드롭 토글 / 🌀 통 흔들기(광고) / 🧹 동전 제거(광고)
 
 ## 개발용 디버그 훅

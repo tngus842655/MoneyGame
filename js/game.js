@@ -11,6 +11,7 @@ const FLOOR_TOP = H - 16;     // top edge of the floor
 const DROP_Y = 104;           // y where held piece hovers
 const LINE_Y = 165;           // game-over line
 const OVER_MS = 2000;         // 위험 상태가 이 시간 연속 유지되면 게임오버
+const COMBO_MS = 5000;        // 이 시간 안에 연달아 합치면 콤보 유지
 const SPAWN_TIERS = 4;        // droppable tiers (coins only)
 const SPAWN_WEIGHTS = [5, 3, 2, 1.2];
 const FONT = '"Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif';
@@ -106,7 +107,19 @@ const sfx = {
   merge: t  => { blip(300 + t * 70, 0.12, 'triangle', 0.13, 1.5); blip((300 + t * 70) * 1.5, 0.1, 'triangle', 0.09, 1.4, 0.05); },
   jackpot: () => { [520, 660, 780, 1040].forEach((f, i) => blip(f, 0.16, 'triangle', 0.12, 1.1, i * 0.09)); },
   over: () => { [440, 350, 262].forEach((f, i) => blip(f, 0.22, 'sine', 0.12, 0.9, i * 0.18)); },
+  record: () => { [523, 659, 784, 1047, 1319].forEach((f, i) => blip(f, 0.14, 'triangle', 0.12, 1.05, i * 0.07)); },
 };
+
+// 배경음악: 플레이 중에만 작게 깔림 (메뉴/게임오버/광고/백그라운드에서는 일시정지)
+const bgm = new Audio('public/bgm/puzzle.mp3');
+bgm.loop = true;
+bgm.volume = 0.15;   // 효과음을 가리지 않는 볼륨
+function playBgm() {
+  if (muted) return;
+  const p = bgm.play();
+  if (p && p.catch) p.catch(() => {});   // 자동재생 차단 등 실패는 조용히 무시
+}
+function pauseBgm() { bgm.pause(); }
 
 // ---------------------------------------------------------------- state
 const canvas = document.getElementById('game');
@@ -142,6 +155,9 @@ let featUses = { shake: MAX_FEAT, clean: MAX_FEAT };
 let reviveUsed = false;      // 📺 부활은 한 판에 1회
 let scoreSubmitted = false;  // 랭킹 중복 제출 방지 (한 판에 1번만)
 let lastCheckpointScore = 0; // 백그라운드 전환 시 스냅샷 중복 방지용
+const LIVE_SUBMIT_MS = 20000; // 플레이 중 실시간 랭킹 반영 주기
+let lastLiveSubmitAt = 0;
+let lastLiveScore = 0;       // 마지막으로 실시간 반영한 점수 (오른 경우에만 재전송)
 let filling = false;         // ⏩ 자동 진행: 4/5 높이까지 동전 자동 투하
 let fillNextAt = 0;
 let fillSpawned = 0;
@@ -163,6 +179,19 @@ try {
   best.krw = +localStorage.getItem('money-merge-best-krw') || 0;
   best.usd = +localStorage.getItem('money-merge-best-usd') || 0;
 } catch (e) {}
+
+// '👑 최고' 표시를 서버(best_scores) 기준으로 동기화 — ranking.js가 로드 후
+// get_my_best를 조회해서 호출한다. 로컬 값은 응답 전/오프라인 표시용 캐시.
+window.applyServerBest = sv => {
+  sv = +sv || 0;
+  if (sv <= best.krw) return;
+  best.krw = sv;
+  try { localStorage.setItem('money-merge-best-krw', String(sv)); } catch (e) {}
+  // 판 도중 서버 값이 도착하면 새 기록(🎉) 판정 기준도 같이 올린다
+  if (state === 'playing' && mode && mode.key === 'krw' && !newRecord) {
+    roundStartBest = Math.max(roundStartBest, sv);
+  }
+};
 
 // ---------------------------------------------------------------- physics
 function initEngine() {
@@ -256,16 +285,26 @@ function processMerges(now) {
 function addScore(v) {
   score += v;
   if (score > best[mode.key]) {
-    if (roundStartBest > 0 && score > roundStartBest) newRecord = true;
+    if (roundStartBest > 0 && score > roundStartBest && !newRecord) {
+      newRecord = true;
+      celebrateNewRecord();   // 이번 판에서 처음 넘어서는 순간 한 번만
+    }
     best[mode.key] = score;
     try { localStorage.setItem('money-merge-best-' + mode.key, String(score)); } catch (e) {}
   }
 }
 
-// 2.5초 안에 연달아 합치면 콤보 — 콤보당 +10% 보너스 (최대 +100%)
+// 🎉 최고 기록을 갱신하는 순간의 알림 연출
+function celebrateNewRecord() {
+  floatTexts.push({ x: W / 2, y: 260, text: '🎉 최고 기록 갱신!', t: 0, life: 2200, size: 30, color: '#e0608a' });
+  spawnBurst(W / 2, 260, 40, ['#ffd76e', '#ffe9a8', '#fff', '#f7b2c4']);
+  sfx.record();
+}
+
+// COMBO_MS 안에 연달아 합치면 콤보 — 콤보당 +10% 보너스 (최대 +100%)
 function mergeScore(value, now) {
   combo = now < comboExpires ? combo + 1 : 1;
-  comboExpires = now + 2500;
+  comboExpires = now + COMBO_MS;
   const bonus = combo > 1 ? Math.round(value * 0.1 * Math.min(combo - 1, 10)) : 0;
   const total = value + bonus;
   addScore(total);
@@ -437,9 +476,44 @@ function doRevive() {
   canDrop = true;
   pendingNextAt = 0;
   state = 'playing';
+  playBgm();
   document.getElementById('over').classList.add('hidden');
   floatTexts.push({ x: W / 2, y: 320, text: '💪 부활!', t: 0, life: 1500, size: 28, color: '#e0608a' });
   sfx.jackpot();
+}
+
+// ---------------------------------------------------------------- ⚠️ 재확인 팝업 (다시하기/홈)
+// 플레이 중 HUD의 🔄/🏠 를 실수로 눌러 판이 날아가지 않도록 한 번 더 확인.
+// 팝업이 열린 동안은 광고 팝업처럼 물리·입력이 정지된다 (step에서 confirmOpen 체크).
+let confirmOpen = false;
+let pendingConfirmAction = null;   // 'restart' | 'home'
+
+function requestConfirm(kind) {
+  if (state !== 'playing') { doConfirmAction(kind); return; }   // 진행 중인 판이 없으면 바로 실행
+  if (adOpen || confirmOpen) return;
+  pendingConfirmAction = kind;
+  confirmOpen = true;
+  aiming = false;
+  activePointerId = null;
+  const texts = {
+    restart: { title: '🔄 다시하기', text: '지금 판을 처음부터 다시 시작할까요?\n지금까지 모은 점수는 랭킹에 저장돼요.' },
+    home:    { title: '🏠 처음으로', text: '게임을 그만두고 첫 화면으로 나갈까요?\n지금까지 모은 점수는 랭킹에 저장돼요.' },
+  };
+  document.getElementById('confirmTitle').textContent = texts[kind].title;
+  document.getElementById('confirmText').textContent = texts[kind].text;
+  document.getElementById('confirmDlg').classList.remove('hidden');
+}
+
+function closeConfirm() {
+  confirmOpen = false;
+  pendingConfirmAction = null;
+  document.getElementById('confirmDlg').classList.add('hidden');
+}
+
+function doConfirmAction(kind) {
+  finalizeAbandon(false);
+  if (kind === 'restart') { if (mode) startGame(mode.key); }
+  else goMenu();
 }
 
 // ---------------------------------------------------------------- 📺 광고 게이트
@@ -476,9 +550,11 @@ function closeAd() {
   if (adCountdown) { clearInterval(adCountdown); adCountdown = null; }
   document.getElementById('adConfirm').classList.add('hidden');
   document.getElementById('adPlay').classList.add('hidden');
+  if (state === 'playing') playBgm();
 }
 
 function playTestAd() {
+  pauseBgm();
   document.getElementById('adConfirm').classList.add('hidden');
   const adPlayEl = document.getElementById('adPlay');
   const countEl = document.getElementById('adCount');
@@ -525,6 +601,7 @@ function startGame(modeKey) {
   if (!engine) initEngine();
   resetBoard();
   state = 'playing';
+  playBgm();
   document.getElementById('menu').classList.add('hidden');
   document.getElementById('over').classList.add('hidden');
   document.getElementById('hud').classList.remove('hidden');
@@ -556,10 +633,13 @@ function resetBoard() {
   shakeUntil = 0;
   if (engine) { engine.gravity.x = 0; engine.gravity.y = 1; }
   closeAd();
+  closeConfirm();
   featUses = { shake: MAX_FEAT, clean: MAX_FEAT };
   reviveUsed = false;
   scoreSubmitted = false;
   lastCheckpointScore = 0;
+  lastLiveSubmitAt = performance.now();   // 시작 직후가 아니라 한 주기 뒤부터 반영
+  lastLiveScore = 0;
   setFilling(false);
   fillSpawned = 0;
   fillNextAt = 0;
@@ -602,6 +682,7 @@ function checkGameOver(now, dt) {
 
 function gameOver() {
   state = 'over';
+  pauseBgm();
   sfx.over();
   if (!scoreSubmitted && window.Ranking) {
     scoreSubmitted = true;
@@ -624,6 +705,17 @@ function finalizeAbandon(beacon) {
   else window.Ranking.submitScore(score);
 }
 
+// 플레이 중 점수가 오르면 주기적으로 랭킹에 실시간 반영.
+// v2(upsert)에서만 실제 전송되므로 아무리 자주 보내도 아이디당 최고기록 1행만 유지된다.
+// (v1 폴백에서는 행이 판마다 늘어나는 문제 때문에 ranking.js가 조용히 건너뜀)
+function maybeLiveSubmit(now) {
+  if (score <= lastLiveScore || now - lastLiveSubmitAt < LIVE_SUBMIT_MS) return;
+  if (!window.Ranking || !window.Ranking.submitScoreLive) return;
+  lastLiveSubmitAt = now;
+  lastLiveScore = score;
+  window.Ranking.submitScoreLive(score);
+}
+
 // 탭 백그라운드 전환처럼 다시 돌아와 이어할 수도 있는 경우: 진행 상황을 스냅샷만 저장
 // (scoreSubmitted를 확정하지 않아, 나중에 진짜 게임오버로 이어지면 최종 점수가 정상 제출됨)
 function checkpointAbandon() {
@@ -634,8 +726,10 @@ function checkpointAbandon() {
 
 function goMenu() {
   state = 'menu';
+  pauseBgm();
   if (engine) for (const b of moneyBodies()) Composite.remove(engine.world, b);
   closeAd();
+  closeConfirm();
   document.getElementById('over').classList.add('hidden');
   document.getElementById('hud').classList.add('hidden');
   document.getElementById('hudR').classList.add('hidden');
@@ -866,10 +960,16 @@ function drawHud() {
   ctx.font = `800 21px ${FONT}`;
   ctx.fillText(mode.format(score), W / 2, py + 36);
 
-  // best
-  ctx.fillStyle = 'rgba(110,120,145,0.85)';
-  ctx.font = `700 12px ${FONT}`;
-  ctx.fillText('👑 최고 ' + mode.format(best[mode.key]), W / 2, py + ph + 13);
+  // best (이번 판에서 기록 갱신 중이면 강조)
+  if (newRecord) {
+    ctx.fillStyle = `rgba(224,96,138,${0.7 + 0.3 * Math.sin(performance.now() / 180)})`;
+    ctx.font = `800 12px ${FONT}`;
+    ctx.fillText('🎉 새 기록 ' + mode.format(best[mode.key]), W / 2, py + ph + 13);
+  } else {
+    ctx.fillStyle = 'rgba(110,120,145,0.85)';
+    ctx.font = `700 12px ${FONT}`;
+    ctx.fillText('👑 최고 ' + mode.format(best[mode.key]), W / 2, py + ph + 13);
+  }
 
   const hudNow = performance.now();
   if (combo >= 2 && hudNow < comboExpires) {
@@ -966,7 +1066,7 @@ function drawFx(dt) {
 
 // ---------------------------------------------------------------- main loop
 function step(now, dt) {
-  if (adOpen) return;               // 광고 보는 동안 게임 일시정지
+  if (adOpen || confirmOpen) return;   // 광고/재확인 팝업 동안 게임 일시정지
   if (engine && state !== 'menu') {
     if (state === 'playing') updateShake(now);
     Engine.update(engine, dt);
@@ -983,6 +1083,7 @@ function step(now, dt) {
         checkGameOver(now, dt);
       }
       if (combo && now >= comboExpires) combo = 0;
+      maybeLiveSubmit(now);
     }
   }
 }
@@ -1056,7 +1157,11 @@ window.addEventListener('pointercancel', e => {
 });
 window.addEventListener('blur', () => { aiming = false; activePointerId = null; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
-document.addEventListener('visibilitychange', () => { if (!document.hidden) ensureAudio(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { pauseBgm(); return; }   // 백그라운드에서는 배경음악도 멈춤
+  ensureAudio();
+  if (state === 'playing' && !adOpen) playBgm();
+});
 
 // ---------------------------------------------------------------- buttons & menu
 document.querySelectorAll('#menu button.mode').forEach(btn => {
@@ -1064,8 +1169,14 @@ document.querySelectorAll('#menu button.mode').forEach(btn => {
 });
 document.getElementById('btnAgain').addEventListener('click', () => startGame(mode.key));
 document.getElementById('btnMenu').addEventListener('click', goMenu);
-document.getElementById('btnHome').addEventListener('click', () => { finalizeAbandon(false); goMenu(); });
-document.getElementById('btnRestart').addEventListener('click', () => { finalizeAbandon(false); if (mode) startGame(mode.key); });
+document.getElementById('btnHome').addEventListener('click', () => requestConfirm('home'));
+document.getElementById('btnRestart').addEventListener('click', () => requestConfirm('restart'));
+document.getElementById('btnConfirmOk').addEventListener('click', () => {
+  const a = pendingConfirmAction;
+  closeConfirm();
+  if (a) doConfirmAction(a);
+});
+document.getElementById('btnConfirmCancel').addEventListener('click', closeConfirm);
 
 // 탭 종료/새로고침 시에도 진행 중이던 점수를 잃지 않도록 저장.
 // visibilitychange(hidden)는 백그라운드 전환에서도 뜨므로 확정 짓지 않고 스냅샷만 남겨
@@ -1075,6 +1186,8 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) check
 document.getElementById('btnMute').addEventListener('click', function () {
   muted = !muted;
   this.textContent = muted ? '🔇' : '🔊';
+  if (muted) pauseBgm();
+  else if (state === 'playing' && !adOpen) playBgm();
 });
 const btnAuto = document.getElementById('btnAuto');
 try { autoDrop = localStorage.getItem('money-merge-auto') === '1'; } catch (e) {}
@@ -1142,6 +1255,10 @@ function buildChain(elId, m) {
   });
 }
 buildChain('chainKrw', MODES.krw);
+
+// 메뉴 콤보 안내 — 문구의 초 수가 COMBO_MS와 항상 일치하도록 여기서 채움
+document.getElementById('comboTip').textContent =
+  `🔥 ${COMBO_MS / 1000}초 안에 연달아 합치면 콤보! 콤보당 +10% 보너스 (최대 2배)`;
 
 // ---------------------------------------------------------------- canvas fit
 const BANNER_H = 62;   // 하단 배너 광고 영역 (60px + 여백)
