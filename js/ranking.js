@@ -93,13 +93,19 @@ const API = {
     return { rank: data[0].rank, score: data[0].score };
   },
 
-  // 서버 기준 내 역대 최고 기록 (월간 버킷들의 최댓값). 없으면 0.
+  // 서버 기준 내 '이번주' 최고 기록 — 게임 내 (최고) 판정·표시 기준.
+  // 역대 최고(get_my_best)가 아니라 주간을 쓰는 이유: 메인 랭킹(이번주 탭)과
+  // 기준을 일치시키기 위해. 오래된 기록은 랭킹에 보이지도 않는데 게임 안에서만
+  // 최고 기록으로 남는 문제를 막는다. get_my_rank('week')를 재사용한다.
+  // 성공하면 숫자(이번 주 기록 없으면 0), 조회 자체가 불가하면 null — 호출자가
+  // "서버가 진짜 0이라고 답함"과 "응답을 못 받음"을 구분할 수 있게 한다.
   async fetchMyBest() {
     const sb = window.supabaseClient;
-    if (!sb) return 0;   // 목 모드
-    const { data, error } = await sb.rpc('get_my_best', { p_player_id: playerId() });
-    if (error) return 0;
-    return +data || 0;
+    if (!sb) return null;   // 목 모드: 서버 없음
+    const { data, error } = await sb.rpc('get_my_rank', { p_period: 'week', p_player_id: playerId() });
+    if (error) return null;
+    if (!data || !data.length) return 0;   // 이번 주 기록 없음
+    return +data[0].score || 0;
   },
 
   // 닉네임 변경 시 내가 남긴 과거 기록의 닉네임도 함께 갱신.
@@ -171,6 +177,7 @@ const cache = {};
 const meCache = {};   // 탭별 내 순위 { rank, score } | null(기록 없음), undefined=미조회
 
 const fmt = v => v.toLocaleString('ko-KR') + '원';
+let pendingSubmit = null;   // 마지막 확정 제출(게임오버/이탈)의 진행 중 Promise
 
 function el(cls, html) {
   const d = document.createElement('div');
@@ -270,11 +277,19 @@ function reload() {
   select(curTab);
 }
 
-function open() {
+async function open() {
   for (const k of Object.keys(cache)) delete cache[k];   // 열 때마다 새로 조회
   for (const k of Object.keys(meCache)) delete meCache[k];
   refreshNickDisplays();
   rankEl.classList.remove('hidden');
+  // 게임오버 직후 열면 최종 점수 제출이 아직 서버에 도달하기 전일 수 있음 —
+  // 진행 중인 제출을 잠깐(최대 1.5초) 기다렸다가 목록을 조회해 최신 점수를 보여준다
+  if (pendingSubmit) {
+    listEl.innerHTML = '';
+    listEl.appendChild(el('rankMsg', '불러오는 중…'));
+    await Promise.race([pendingSubmit, new Promise(r => setTimeout(r, 1500))]);
+    pendingSubmit = null;
+  }
   select(curTab);
 }
 function close() {
@@ -310,9 +325,11 @@ nickInput.addEventListener('keydown', e => { if (e.key === 'Enter') saveNick(); 
 
 refreshNickDisplays();
 
-// 시작 시 서버 기준 내 최고 기록을 조회해 게임 내 '👑 최고' 표시에 반영
+// 시작 시 서버 기준 내 최고 기록을 조회해 게임 내 최고 기록 기준에 반영.
+// 서버 응답이 있으면 값이 낮아도(0 포함) 그대로 전달 — 랭킹(DB)이 진실의 원천.
+// null(조회 실패/목 모드)일 때만 로컬 캐시를 그대로 둔다.
 Promise.resolve(API.fetchMyBest()).then(v => {
-  if (v > 0 && typeof window.applyServerBest === 'function') window.applyServerBest(v);
+  if (v !== null && typeof window.applyServerBest === 'function') window.applyServerBest(v);
 }).catch(() => {});
 
 // ================================================================ 외부 노출
@@ -322,7 +339,10 @@ window.Ranking = {
   myName,
   setName,
   refreshNickDisplays,
-  submitScore: score => Promise.resolve(API.submitScore(score)).catch(() => {}),
+  submitScore: score => {
+    pendingSubmit = Promise.resolve(API.submitScore(score)).catch(() => {});
+    return pendingSubmit;
+  },
   submitScoreLive: score => Promise.resolve(API.submitScore(score)).catch(() => {}),   // 실시간 반영도 같은 upsert
   submitScoreBeacon: score => API.submitScoreBeacon(score),
 };

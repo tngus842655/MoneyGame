@@ -67,17 +67,26 @@ function showLoaded(cbs) {
   let earned = false;
   let finished = false;
   let noDismissTimer = 0;
+  // dismissed가 안 오는 토스앱 대비 2차 안전망: 보상 확정 후 웹뷰가 다시
+  // 보이는 순간(네이티브 광고 닫힘)을 감지해 타임아웃(10초)보다 먼저 마무리
+  const onVisible = () => {
+    if (earned && document.visibilityState === 'visible') setTimeout(finish, 300);
+  };
+  const cleanup = () => {
+    clearTimeout(noDismissTimer);
+    document.removeEventListener('visibilitychange', onVisible);
+  };
   const finish = () => {
     if (finished) return;
     finished = true;
-    clearTimeout(noDismissTimer);
+    cleanup();
     loadRewarded();        // 다음 광고 미리 로드 (load → show → load 패턴)
     cbs.onFinish(earned);
   };
   const fail = (error) => {
     if (finished) return;
     finished = true;
-    clearTimeout(noDismissTimer);
+    cleanup();
     console.error('[toss-ads] 보상형 광고 표시 실패:', error);
     loadRewarded();
     cbs.onFail(error);
@@ -91,8 +100,12 @@ function showLoaded(cbs) {
             if (cbs.onShow) cbs.onShow();
             break;
           case 'userEarnedReward':
-            // 보상 지급은 이 이벤트에서만 확정 (dismissed만으로는 지급 금지)
+            // 보상 지급은 이 이벤트에서만 확정 (dismissed만으로는 지급 금지).
+            // 횟수 차감 같은 회계 처리는 여기서 바로 알림 — dismissed가 늦거나
+            // 안 와도 차감/배지가 즉시 반영되게 함 (기능 실행은 finish에서)
             earned = true;
+            if (cbs.onEarned) { try { cbs.onEarned(); } catch (e) {} }
+            document.addEventListener('visibilitychange', onVisible);
             noDismissTimer = setTimeout(finish, NO_DISMISS_MS);
             break;
           case 'dismissed':
@@ -110,7 +123,9 @@ function showLoaded(cbs) {
   }
 }
 
-// cbs: { onShow?, onFinish(earned), onFail(error) } — onFinish/onFail 중 정확히 하나만 호출됨
+// cbs: { onShow?, onEarned?, onFinish(earned), onFail(error) }
+// - onEarned: 보상 확정(userEarnedReward) 즉시 1회 호출 — 횟수 차감 등 회계 처리용
+// - onFinish/onFail 중 정확히 하나만 호출됨 (기능 실행은 여기서)
 function showRewarded(cbs) {
   if (!rewardedSupported()) { cbs.onFail(new Error('unsupported')); return; }
   if (waitingShow) { cbs.onFail(new Error('busy')); return; }

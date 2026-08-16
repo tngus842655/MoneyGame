@@ -82,7 +82,12 @@ function halfW(def) { return def.kind === 'coin' ? def.r : def.w / 2; }
 function halfH(def) { return def.kind === 'coin' ? def.r : def.h / 2; }
 
 // ---------------------------------------------------------------- audio
-let audioCtx = null, muted = false;
+// 효과음/배경음악을 각각 켜고 끌 수 있게 분리 (localStorage로 기기별 유지)
+let audioCtx = null, sfxMuted = false, bgmMuted = false;
+try {
+  sfxMuted = localStorage.getItem('money-merge-mute-sfx') === '1';
+  bgmMuted = localStorage.getItem('money-merge-mute-bgm') === '1';
+} catch (e) {}
 function ensureAudio() {
   if (!audioCtx) {
     try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
@@ -91,7 +96,7 @@ function ensureAudio() {
   if (audioCtx && audioCtx.state !== 'running') audioCtx.resume();
 }
 function blip(freq, dur = 0.1, type = 'triangle', vol = 0.12, slide = 1, delay = 0) {
-  if (muted || !audioCtx || audioCtx.state !== 'running') return;
+  if (sfxMuted || !audioCtx || audioCtx.state !== 'running') return;
   const t = audioCtx.currentTime + delay;
   const o = audioCtx.createOscillator(), g = audioCtx.createGain();
   o.type = type;
@@ -111,11 +116,29 @@ const sfx = {
 };
 
 // 배경음악: 플레이 중에만 작게 깔림 (메뉴/게임오버/광고/백그라운드에서는 일시정지)
+const BGM_VOL = 0.08;   // 효과음이 묻히지 않는 배경음악 볼륨
 const bgm = new Audio('public/bgm/puzzle.mp3');
 bgm.loop = true;
-bgm.volume = 0.15;   // 효과음을 가리지 않는 볼륨
+// iOS 웹뷰는 <audio>의 volume 속성을 무시하고 항상 최대 볼륨으로 재생한다.
+// 실제로 줄이려면 WebAudio 게인 노드를 거쳐야 함 — 연결 성공 시 element 볼륨은
+// 1로 두고 게인으로만 조절, 실패(구형 브라우저 등) 시 volume 폴백.
+bgm.volume = BGM_VOL;
+let bgmGain = null;
+function ensureBgmChain() {
+  if (bgmGain || !audioCtx) return;
+  try {
+    const src = audioCtx.createMediaElementSource(bgm);   // 엘리먼트당 1회만 가능
+    bgmGain = audioCtx.createGain();
+    bgmGain.gain.value = BGM_VOL;
+    src.connect(bgmGain);
+    bgmGain.connect(audioCtx.destination);
+    bgm.volume = 1;   // 게인과 이중으로 줄지 않게
+  } catch (e) {}      // 실패하면 volume(0.08) 폴백 유지
+}
 function playBgm() {
-  if (muted) return;
+  if (bgmMuted) return;
+  ensureAudio();
+  ensureBgmChain();
   const p = bgm.play();
   if (p && p.catch) p.catch(() => {});   // 자동재생 차단 등 실패는 조용히 무시
 }
@@ -180,16 +203,21 @@ try {
   best.usd = +localStorage.getItem('money-merge-best-usd') || 0;
 } catch (e) {}
 
-// '👑 최고' 표시를 서버(best_scores) 기준으로 동기화 — ranking.js가 로드 후
-// get_my_best를 조회해서 호출한다. 로컬 값은 응답 전/오프라인 표시용 캐시.
+// 최고 기록을 서버(best_scores) 기준으로 동기화 — ranking.js가 로드 후
+// get_my_best를 조회해서 호출한다. 서버가 랭킹의 실제 기준이므로 응답이 오면
+// 로컬 캐시보다 우선한다 (DB에서 기록이 지워졌으면 낮아지는 것도 그대로 반영).
+// 조회 실패 시에는 아예 호출되지 않아 로컬 캐시가 유지된다 (오프라인 안전).
 window.applyServerBest = sv => {
   sv = +sv || 0;
-  if (sv <= best.krw) return;
-  best.krw = sv;
-  try { localStorage.setItem('money-merge-best-krw', String(sv)); } catch (e) {}
-  // 판 도중 서버 값이 도착하면 새 기록(🎉) 판정 기준도 같이 올린다
+  // 진행 중인 판에서 이미 얻은 점수 아래로는 내리지 않음 (방금 세운 기록 보호)
+  const floor = (state === 'playing' && mode && mode.key === 'krw') ? score : 0;
+  const next = Math.max(sv, floor);
+  if (next === best.krw) return;
+  best.krw = next;
+  try { localStorage.setItem('money-merge-best-krw', String(next)); } catch (e) {}
+  // 판 도중 도착하면 새 기록 판정 기준도 서버 값으로 재설정
   if (state === 'playing' && mode && mode.key === 'krw' && !newRecord) {
-    roundStartBest = Math.max(roundStartBest, sv);
+    roundStartBest = sv;
   }
 };
 
@@ -467,6 +495,9 @@ function cleanCoins() {
 // ---------------------------------------------------------------- 💪 부활 (1회)
 function doRevive() {
   reviveUsed = true;
+  // 게임오버 때 true가 됐던 제출 플래그를 풀어야 부활 후 다시 죽거나 이탈할 때
+  // 최종 점수가 제출된다 (서버는 upsert로 최고점만 유지하므로 중복 제출 안전)
+  scoreSubmitted = false;
   removeCoins();
   // 남은 지폐들이 즉시 위험 판정되지 않게 유예 시간 리셋
   const now = performance.now();
@@ -476,6 +507,7 @@ function doRevive() {
   canDrop = true;
   pendingNextAt = 0;
   state = 'playing';
+  syncPageBg('play');
   playBgm();
   document.getElementById('over').classList.add('hidden');
   floatTexts.push({ x: W / 2, y: 320, text: '💪 부활!', t: 0, life: 1500, size: 28, color: '#e0608a' });
@@ -574,8 +606,19 @@ function playRewardedAd(bridge) {
   document.getElementById('adCount').classList.add('hidden');
   document.getElementById('adPlayMsg').textContent = '📺 광고 불러오는 중…';
   adPlayEl.classList.remove('hidden');
+  let charged = false;   // onEarned에서 횟수를 이미 차감했는지 (onFinish 중복 차감 방지)
   bridge.showRewarded({
     onShow: () => adPlayEl.classList.add('hidden'),   // 네이티브 광고가 화면을 덮음
+    // 보상 확정 즉시 횟수 차감 + 배지 갱신 — 일부 토스앱은 dismissed가 늦거나
+    // 안 와서(최대 10초 타임아웃) onFinish만 기다리면 차감 표시가 한참 늦게 보임
+    onEarned: () => {
+      const action = pendingAdAction;
+      if (action && action !== 'revive' && state === 'playing' && featUses[action] > 0) {
+        featUses[action]--;
+        updateFeatUi();
+        charged = true;
+      }
+    },
     onFinish: (earned) => {
       const action = pendingAdAction;
       closeAd();
@@ -586,9 +629,11 @@ function playRewardedAd(bridge) {
       blip(880, 0.12, 'triangle', 0.1);
       if (action === 'revive') {
         if (state === 'over' && !reviveUsed) doRevive();
-      } else if (state === 'playing' && action && featUses[action] > 0) {
-        featUses[action]--;
-        updateFeatUi();
+      } else if (state === 'playing' && action && (charged || featUses[action] > 0)) {
+        if (!charged) {          // onEarned를 못 받은 경우의 안전망 (기존 동작)
+          featUses[action]--;
+          updateFeatUi();
+        }
         if (action === 'shake') startShake();
         else if (action === 'clean') cleanCoins();
       }
@@ -643,10 +688,24 @@ function spawnBurst(x, y, n, colors) {
 }
 
 // ---------------------------------------------------------------- game flow
+// 토스 전체화면에서는 상태바 뒤 영역(body 배경)이 그대로 보이므로,
+// 캔버스 상단과 같은 색으로 맞춰야 화면이 한 장처럼 이어진다.
+// - play: 캔버스 하늘 그라데이션의 맨 위 색 (#b7dcf5, drawBackground)
+// - overlay: 메뉴/게임오버/랭킹 오버레이 색을 하늘 위에 합성한 색
+function syncPageBg(kind) {
+  if (!document.body.classList.contains('in-toss')) return;
+  document.body.style.background = kind === 'play' ? '#b7dcf5' : '#d4edfb';
+}
+
 function startGame(modeKey) {
   mode = MODES[modeKey];
   if (!engine) initEngine();
   resetBoard();
+  syncPageBg('play');
+  // 지난 판/지난 세션에서 자동 드롭을 켜둔 채 시작하면 사용법을 한 번 상기
+  if (autoDrop) {
+    floatTexts.push({ x: W / 2, y: 300, text: '자동 드롭 ON — 꾹 누르고 있으면 계속 떨어져요', t: 0, life: 2000, size: 15, color: '#e8961e' });
+  }
   state = 'playing';
   playBgm();
   document.getElementById('menu').classList.add('hidden');
@@ -738,10 +797,14 @@ function gameOver() {
   const overEl = document.getElementById('over');
   document.getElementById('finalScore').textContent = mode.format(score);
   document.getElementById('finalBest').textContent =
-    (newRecord ? '🎉 새 기록! ' : '👑 최고 기록 ') + mode.format(best[mode.key]);
+    (newRecord ? '🎉 새 기록! ' : '👑 이번주 최고 ') + mode.format(best[mode.key]);
   document.getElementById('btnRevive').classList.toggle('hidden', reviveUsed);
   if (window.Ranking) window.Ranking.refreshNickDisplays();
-  setTimeout(() => { if (state === 'over') overEl.classList.remove('hidden'); }, 600);
+  setTimeout(() => {
+    if (state !== 'over') return;
+    overEl.classList.remove('hidden');
+    syncPageBg('overlay');
+  }, 600);
 }
 
 // 재시작/홈/탭종료처럼 이번 판이 확실히 끝나는 이탈: 그 시점 점수를 확정 제출
@@ -773,6 +836,7 @@ function checkpointAbandon() {
 
 function goMenu() {
   state = 'menu';
+  syncPageBg('overlay');
   pauseBgm();
   if (engine) for (const b of moneyBodies()) Composite.remove(engine.world, b);
   closeAd();
@@ -995,34 +1059,33 @@ function drawHeld(now) {
 function drawHud() {
   if (state === 'menu') return;
 
-  // score pill
-  const pw = 216, ph = 54, px = W / 2 - pw / 2, py = 10;
-  roundRect(ctx, px, py, pw, ph, 27);
-  ctx.fillStyle = 'rgba(247,143,179,0.95)'; ctx.fill();
-  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke();
+  // score pill — 금액만 표시. 최고 기록 갱신 중이면 (최고) 접두 + 금색 강조
+  const hudNow = performance.now();
+  const pw = 216, ph = 44, px = W / 2 - pw / 2, py = 10;
+  if (newRecord) {
+    const glow = 0.5 + 0.5 * Math.sin(hudNow / 180);
+    ctx.save();
+    ctx.shadowColor = `rgba(255,170,40,${0.35 + 0.45 * glow})`;
+    ctx.shadowBlur = 12 + 10 * glow;
+    roundRect(ctx, px, py, pw, ph, 22);
+    ctx.fillStyle = 'rgba(255,178,64,0.97)'; ctx.fill();
+    ctx.restore();
+    roundRect(ctx, px, py, pw, ph, 22);
+    ctx.lineWidth = 3; ctx.strokeStyle = `rgba(255,235,170,${0.6 + 0.4 * glow})`; ctx.stroke();
+  } else {
+    roundRect(ctx, px, py, pw, ph, 22);
+    ctx.fillStyle = 'rgba(247,143,179,0.95)'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke();
+  }
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = `700 12px ${FONT}`;
-  ctx.fillText('모은 돈', W / 2, py + 14);
   ctx.font = `800 21px ${FONT}`;
-  ctx.fillText(mode.format(score), W / 2, py + 36);
+  ctx.fillText((newRecord ? '(최고) ' : '') + mode.format(score), W / 2, py + ph / 2 + 1);
 
-  // best (이번 판에서 기록 갱신 중이면 강조)
-  if (newRecord) {
-    ctx.fillStyle = `rgba(224,96,138,${0.7 + 0.3 * Math.sin(performance.now() / 180)})`;
-    ctx.font = `800 12px ${FONT}`;
-    ctx.fillText('🎉 새 기록 ' + mode.format(best[mode.key]), W / 2, py + ph + 13);
-  } else {
-    ctx.fillStyle = 'rgba(110,120,145,0.85)';
-    ctx.font = `700 12px ${FONT}`;
-    ctx.fillText('👑 최고 ' + mode.format(best[mode.key]), W / 2, py + ph + 13);
-  }
-
-  const hudNow = performance.now();
   if (combo >= 2 && hudNow < comboExpires) {
     ctx.fillStyle = '#ff8c42';
     ctx.font = `800 15px ${FONT}`;
-    ctx.fillText(`🔥 ${combo} 콤보!`, W / 2, py + ph + 32);
+    ctx.fillText(`🔥 ${combo} 콤보!`, W / 2, py + ph + 16);
   }
   if (raining) {
     ctx.fillStyle = `rgba(224,96,138,${0.7 + 0.3 * Math.sin(hudNow / 120)})`;
@@ -1058,20 +1121,6 @@ function drawHud() {
     ctx.fillText(`⚠️ ${(remain / 1000).toFixed(1)}초`, W / 2, by - 11);
   }
 
-  // next preview
-  const nx = W - 46, ny = 47;
-  ctx.beginPath(); ctx.arc(nx, ny, 30, 0, TAU);
-  ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fill();
-  ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(247,143,179,0.9)'; ctx.stroke();
-  ctx.fillStyle = '#8a90a5';
-  ctx.font = `700 11px ${FONT}`;
-  ctx.fillText('다음', nx, ny - 40);
-  const nDef = mode.tiers[queue[1]];
-  const sc = Math.min(1, 22 / halfW(nDef));
-  ctx.save();
-  ctx.translate(nx, ny); ctx.scale(sc, sc);
-  drawPiece(ctx, nDef);
-  ctx.restore();
 }
 
 function drawFx(dt) {
@@ -1230,12 +1279,30 @@ document.getElementById('btnConfirmCancel').addEventListener('click', closeConfi
 // 다시 돌아와 이어하다 진짜 게임오버가 나면 최종 점수가 정상적으로 덮어 제출되게 한다.
 window.addEventListener('pagehide', () => finalizeAbandon(true));
 document.addEventListener('visibilitychange', () => { if (document.hidden) checkpointAbandon(); });
-document.getElementById('btnMute').addEventListener('click', function () {
-  muted = !muted;
-  this.textContent = muted ? '🔇' : '🔊';
-  if (muted) pauseBgm();
+// 효과음/배경음악 개별 토글
+const btnSfx = document.getElementById('btnSfx');
+const btnBgm = document.getElementById('btnBgm');
+function renderSoundBtns() {
+  // 꺼짐 표시는 두 버튼 모두 같은 빨간 빗금(CSS .mutedOff)으로 통일
+  btnSfx.classList.toggle('mutedOff', sfxMuted);
+  btnBgm.classList.toggle('mutedOff', bgmMuted);
+}
+btnSfx.addEventListener('click', () => {
+  ensureAudio();
+  sfxMuted = !sfxMuted;
+  try { localStorage.setItem('money-merge-mute-sfx', sfxMuted ? '1' : '0'); } catch (e) {}
+  renderSoundBtns();
+  if (!sfxMuted) blip(660, 0.08, 'triangle', 0.1);   // 켜짐 확인음
+});
+btnBgm.addEventListener('click', () => {
+  ensureAudio();
+  bgmMuted = !bgmMuted;
+  try { localStorage.setItem('money-merge-mute-bgm', bgmMuted ? '1' : '0'); } catch (e) {}
+  renderSoundBtns();
+  if (bgmMuted) pauseBgm();
   else if (state === 'playing' && !adOpen) playBgm();
 });
+renderSoundBtns();
 const btnAuto = document.getElementById('btnAuto');
 try { autoDrop = localStorage.getItem('money-merge-auto') === '1'; } catch (e) {}
 btnAuto.classList.toggle('on', autoDrop);
@@ -1243,6 +1310,10 @@ btnAuto.addEventListener('click', () => {
   autoDrop = !autoDrop;
   btnAuto.classList.toggle('on', autoDrop);
   try { localStorage.setItem('money-merge-auto', autoDrop ? '1' : '0'); } catch (e) {}
+  // 아이콘만으로는 "꾹 누르면 자동"이 전달되지 않아, 토글할 때마다 사용법을 화면에 안내
+  floatTexts.push(autoDrop
+    ? { x: W / 2, y: 300, text: '자동 드롭 ON — 꾹 누르고 있으면 계속 떨어져요!', t: 0, life: 2000, size: 16, color: '#e8961e' }
+    : { x: W / 2, y: 300, text: '자동 드롭 OFF', t: 0, life: 1100, size: 15, color: '#8a90a5' });
 });
 const btnShake = document.getElementById('btnShake');
 const btnClean = document.getElementById('btnClean');
@@ -1312,7 +1383,11 @@ function fit() {
   // 하단 배너 높이 실측: 자리표시자 60px / 토스 실배너 96px (+마진 2px)
   const adEl = document.getElementById('adBanner');
   const bannerH = (adEl.offsetHeight || 60) + 2;
-  let s = Math.min(window.innerWidth / W, (window.innerHeight - bannerH) / H);
+  // 전체화면 웹뷰에서는 body 패딩이 safe area(상태바/홈 인디케이터) 몫 — 가용 영역에서 제외
+  const bodyCS = getComputedStyle(document.body);
+  const padV = (parseFloat(bodyCS.paddingTop) || 0) + (parseFloat(bodyCS.paddingBottom) || 0);
+  const padH = (parseFloat(bodyCS.paddingLeft) || 0) + (parseFloat(bodyCS.paddingRight) || 0);
+  let s = Math.min((window.innerWidth - padH) / W, (window.innerHeight - padV - bannerH) / H);
   if (!isFinite(s) || s <= 0) s = 1;
   canvas.style.width = W * s + 'px';
   canvas.style.height = H * s + 'px';
@@ -1330,6 +1405,34 @@ function fit() {
 }
 window.addEventListener('resize', fit);
 fit();
+
+// ---------------------------------------------------------------- 첫 로딩 스플래시 해제
+// 토스 웹뷰는 열리는 전환 동안 뷰포트가 작게 시작했다가 전체화면으로 커진다.
+// 그 중간 크기로 계산된 레이아웃이 잠깐 보이지 않도록 스플래시로 가리고,
+// 토스 안에서는 뷰포트 높이가 기기 화면 높이에 거의 도달(=전체화면 완료)하고
+// 크기가 연속 6프레임 동일해질 때까지 기다린다 (최소 0.25초, 최대 2.5초 안전망).
+(() => {
+  const splash = document.getElementById('splash');
+  if (!splash) return;
+  const inToss = document.body.classList.contains('in-toss');
+  const t0 = performance.now();
+  let lastW = -1, lastH = -1, stableFrames = 0;
+  function waitStable() {
+    const w = window.innerWidth, h = window.innerHeight;
+    if (w === lastW && h === lastH) stableFrames++;
+    else { stableFrames = 0; lastW = w; lastH = h; }
+    const fullscreen = !inToss || h >= (screen.height || 0) * 0.85;
+    const elapsed = performance.now() - t0;
+    if ((stableFrames >= 6 && elapsed >= 250 && fullscreen) || elapsed >= 2500) {
+      fit();   // 안정된 최종 크기로 한 번 더 계산해 두고 공개
+      splash.classList.add('hide');
+      setTimeout(() => splash.remove(), 350);
+      return;
+    }
+    requestAnimationFrame(waitStable);
+  }
+  requestAnimationFrame(waitStable);
+})();
 
 requestAnimationFrame(loop);
 
