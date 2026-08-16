@@ -467,6 +467,9 @@ function cleanCoins() {
 // ---------------------------------------------------------------- 💪 부활 (1회)
 function doRevive() {
   reviveUsed = true;
+  // 게임오버 때 true가 됐던 제출 플래그를 풀어야 부활 후 다시 죽거나 이탈할 때
+  // 최종 점수가 제출된다 (서버는 upsert로 최고점만 유지하므로 중복 제출 안전)
+  scoreSubmitted = false;
   removeCoins();
   // 남은 지폐들이 즉시 위험 판정되지 않게 유예 시간 리셋
   const now = performance.now();

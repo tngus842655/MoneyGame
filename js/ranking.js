@@ -171,6 +171,7 @@ const cache = {};
 const meCache = {};   // 탭별 내 순위 { rank, score } | null(기록 없음), undefined=미조회
 
 const fmt = v => v.toLocaleString('ko-KR') + '원';
+let pendingSubmit = null;   // 마지막 확정 제출(게임오버/이탈)의 진행 중 Promise
 
 function el(cls, html) {
   const d = document.createElement('div');
@@ -270,11 +271,19 @@ function reload() {
   select(curTab);
 }
 
-function open() {
+async function open() {
   for (const k of Object.keys(cache)) delete cache[k];   // 열 때마다 새로 조회
   for (const k of Object.keys(meCache)) delete meCache[k];
   refreshNickDisplays();
   rankEl.classList.remove('hidden');
+  // 게임오버 직후 열면 최종 점수 제출이 아직 서버에 도달하기 전일 수 있음 —
+  // 진행 중인 제출을 잠깐(최대 1.5초) 기다렸다가 목록을 조회해 최신 점수를 보여준다
+  if (pendingSubmit) {
+    listEl.innerHTML = '';
+    listEl.appendChild(el('rankMsg', '불러오는 중…'));
+    await Promise.race([pendingSubmit, new Promise(r => setTimeout(r, 1500))]);
+    pendingSubmit = null;
+  }
   select(curTab);
 }
 function close() {
@@ -322,7 +331,10 @@ window.Ranking = {
   myName,
   setName,
   refreshNickDisplays,
-  submitScore: score => Promise.resolve(API.submitScore(score)).catch(() => {}),
+  submitScore: score => {
+    pendingSubmit = Promise.resolve(API.submitScore(score)).catch(() => {});
+    return pendingSubmit;
+  },
   submitScoreLive: score => Promise.resolve(API.submitScore(score)).catch(() => {}),   // 실시간 반영도 같은 upsert
   submitScoreBeacon: score => API.submitScoreBeacon(score),
 };
