@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>머니 게임</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; overflow:hidden; }
+  body {
+    background:#9fc6e8;
+    display:flex; align-items:center; justify-content:center;
+    font-family:"Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    user-select:none; -webkit-user-select:none;
+  }
+  #wrap { display:flex; flex-direction:column; align-items:center; }
+  #gameArea { position:relative; line-height:0; }
+  canvas { display:block; touch-action:none; border-radius:12px 12px 0 0; box-shadow:0 10px 40px rgba(30,60,100,.35); }
+
+  /* banner ad slot */
+  #adBanner {
+    height:60px; margin-top:2px; border-radius:0 0 12px 12px;
+    background:#252a36; color:#8a93ab; letter-spacing:1px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:13px; box-shadow:0 10px 40px rgba(30,60,100,.35);
+  }
+
+  /* floating buttons */
+  #hud, #hudR { position:absolute; display:flex; flex-direction:column; gap:8px; line-height:normal; }
+  #hud  { top:10px; left:10px; }
+  #hudR { top:88px; right:10px; }
+  #hud button, #hudR button {
+    position:relative; width:38px; height:38px; border-radius:50%; border:2px solid rgba(255,255,255,.9);
+    background:rgba(255,255,255,.55); font-size:18px; cursor:pointer; touch-action:manipulation;
+    box-shadow:0 2px 6px rgba(50,80,120,.25);
+  }
+  #hud button:active, #hudR button:active { transform:scale(.92); }
+  #hudR button.on { background:#ffd76e; border-color:#fff; box-shadow:0 2px 8px rgba(230,170,40,.55); }
+  #hudR button.ad::after {
+    content:'AD'; position:absolute; right:-5px; bottom:-4px;
+    background:#ffcf3d; color:#7a5b00; font-size:9px; font-weight:800;
+    padding:1px 4px; border-radius:6px; border:1px solid #fff; line-height:1.2;
+  }
+  #hudR button.ad::before {
+    content:attr(data-count); position:absolute; left:-6px; top:-5px;
+    min-width:17px; height:17px; box-sizing:border-box; padding:0 3px;
+    background:#5fa8e8; color:#fff; font-size:10px; font-weight:800;
+    border-radius:9px; border:1px solid #fff; line-height:15px; text-align:center;
+  }
+  #hudR button.ad.off { background:#f0736f; cursor:default; }
+  #hudR button.ad.off::before { background:#c65550; }
+  #hudR button.ad.off:active { transform:none; }
+
+  .overlay {
+    position:absolute; inset:0; display:flex; overflow-y:auto; border-radius:12px; line-height:normal;
+    background:rgba(214,238,252,.92); backdrop-filter:blur(3px);
+  }
+  .overlay .sheet {
+    margin:auto; display:flex; flex-direction:column; align-items:center;
+    gap:14px; text-align:center; padding:24px 16px; width:100%;
+  }
+  .hidden { display:none !important; }
+  .overlay h1 { font-size:clamp(24px, 9vmin, 38px); color:#5b4636; letter-spacing:1px; }
+  .overlay h2 { font-size:clamp(20px, 7vmin, 30px); color:#5b4636; }
+  .overlay p  { font-size:clamp(12px, 4vmin, 15px); color:#6b7480; line-height:1.5; }
+  .overlay .big { font-size:clamp(18px, 6vmin, 26px); font-weight:800; color:#e0608a; }
+  .overlay .sub { font-size:clamp(12px, 4vmin, 14px); color:#8a90a5; }
+  .overlay button.mode, .overlay button.act {
+    font-family:inherit; font-size:clamp(14px, 5vmin, 18px); font-weight:700; color:#fff; cursor:pointer;
+    border:none; border-radius:999px; padding:12px 24px; min-width:min(230px, 82%);
+    box-shadow:0 4px 0 rgba(0,0,0,.15); touch-action:manipulation;
+  }
+  .overlay button:active { transform:translateY(2px); box-shadow:0 2px 0 rgba(0,0,0,.15); }
+  button[data-mode="krw"] { background:#5fa8e8; }
+  button[data-mode="usd"] { background:#67b984; }
+  #btnAgain, #btnAdOk { background:#f78fb3; }
+  #btnMenu, #btnAdCancel { background:#9aa5c4; }
+  #btnRevive { background:#67b984; }
+
+  .chainBox { margin-top:2px; }
+  .chainBox .cap { font-size:12px; font-weight:700; color:#8a90a5; margin-bottom:4px; }
+  .chain { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:3px; max-width:min(360px, 94vw); }
+  .chain .arrow { font-size:11px; color:#b0b8cc; }
+  .chain .coin, .chain .bill {
+    display:inline-flex; align-items:center; justify-content:center;
+    font-weight:800; line-height:1;
+  }
+  .chain .coin { border-radius:50%; }
+  .chain .bill { border-radius:4px; border-width:2px; border-style:solid; }
+
+  /* ad dialogs */
+  #adConfirmText { white-space:pre-line; }
+  .overlay.dark { background:rgba(30,34,48,.9); }
+  .overlay.dark p, .overlay.dark .sub { color:#c9d0e2; }
+  #adBox {
+    width:min(250px, 80%); height:140px; border-radius:14px;
+    background:linear-gradient(135deg, #3b4460, #232a40);
+    color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:6px; font-size:22px; font-weight:800; border:2px dashed rgba(255,255,255,.35);
+  }
+  #adBox .adSmall { font-size:12px; font-weight:600; color:#9aa5c4; letter-spacing:2px; }
+  #adCount {
+    width:52px; height:52px; border-radius:50%; background:#ffcf3d; color:#5b4400;
+    font-size:26px; font-weight:800; display:flex; align-items:center; justify-content:center;
+    border:3px solid #fff;
+  }
+
+  /* ranking */
+  #btnRank {
+    position:absolute; top:12px; right:12px; width:46px; height:46px; border-radius:50%;
+    border:2px solid #fff; background:#ffd76e; font-size:21px; cursor:pointer;
+    box-shadow:0 3px 8px rgba(80,60,20,.25); touch-action:manipulation; z-index:1;
+  }
+  #btnRank:active { transform:scale(.92); }
+  #rankPanel { display:flex; flex-direction:column; width:100%; height:100%; padding:12px 12px 8px; line-height:normal; }
+  #rankHead { display:flex; align-items:center; justify-content:space-between; }
+  #rankHead h2 { font-size:22px; color:#5b4636; }
+  #btnRankClose {
+    width:34px; height:34px; border-radius:50%; border:2px solid #fff; background:rgba(255,255,255,.6);
+    font-size:15px; color:#8a90a5; cursor:pointer; touch-action:manipulation;
+  }
+  #rankTabs { display:flex; gap:6px; margin:10px 0; }
+  #rankTabs button {
+    flex:1; padding:9px 0; border-radius:999px; border:none; font-family:inherit;
+    font-size:13px; font-weight:700; background:rgba(255,255,255,.6); color:#8a90a5;
+    cursor:pointer; touch-action:manipulation;
+  }
+  #rankTabs button.active { background:#f78fb3; color:#fff; }
+  #rankList { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:5px; padding-bottom:6px; }
+  .rankMsg { text-align:center; color:#8a90a5; padding:34px 0; font-size:14px; }
+  .rankCap { text-align:center; font-size:12px; color:#8a90a5; margin:2px 0; }
+  .rankRow {
+    display:flex; align-items:center; gap:8px; flex:none;
+    background:rgba(255,255,255,.55); border-radius:10px; padding:7px 10px;
+    font-size:13px; color:#5a617a;
+  }
+  .rankRow .no { width:36px; text-align:center; font-weight:800; flex:none; }
+  .rankRow .nick { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+  .rankRow .pts { font-weight:800; color:#e0608a; flex:none; }
+  .rankRow.hot { background:rgba(255,228,140,.6); border:1.5px solid rgba(222,178,74,.55); }
+  .rankRow.me { outline:2px solid #5fa8e8; }
+  .rankRow.t1 { background:linear-gradient(90deg,#ffe9a8,#f7d874); border:1.5px solid #d9b24a; font-size:15px; padding:11px 10px; }
+  .rankRow.t2 { background:linear-gradient(90deg,#eef2f5,#d9dfe5); border:1.5px solid #aab2ba; font-size:14px; padding:10px; }
+  .rankRow.t3 { background:linear-gradient(90deg,#f2d3b3,#e5b98d); border:1.5px solid #c08552; font-size:14px; padding:10px; }
+  .podium { display:flex; align-items:flex-end; justify-content:center; gap:8px; margin:8px 4px 12px; flex:none; }
+  .pCol { flex:1; max-width:112px; display:flex; flex-direction:column; align-items:center; gap:3px; min-width:0; }
+  .pCol .pMedal { font-size:27px; }
+  .pCol .pNick { font-size:12px; font-weight:700; color:#5a617a; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pCol .pPts { font-size:11px; font-weight:800; color:#e0608a; }
+  .pCol .pBlock {
+    width:100%; border-radius:8px 8px 0 0; display:flex; align-items:center; justify-content:center;
+    font-size:24px; font-weight:800; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.2);
+  }
+  .pCol.first  .pBlock { height:88px; background:linear-gradient(#f7d874,#d9a93a); }
+  .pCol.second .pBlock { height:64px; background:linear-gradient(#dde3e8,#a9b2bc); }
+  .pCol.third  .pBlock { height:50px; background:linear-gradient(#e8bd8f,#bd8250); }
+</style>
+</head>
+<body>
+  <div id="wrap">
+    <div id="gameArea">
+    <canvas id="game"></canvas>
+
+    <div id="hud" class="hidden">
+      <button id="btnMute" title="소리">🔊</button>
+      <button id="btnRestart" title="다시하기">🔄</button>
+      <button id="btnHome" title="처음으로">🏠</button>
+    </div>
+
+    <div id="hudR" class="hidden">
+      <button id="btnAuto" title="자동 드롭 (길게 누르면 자동으로 떨어짐)">⚡</button>
+      <button id="btnFill" title="자동 진행 (공간 4/5까지 동전 자동 투하)">⏩</button>
+      <button id="btnShake" class="ad" title="통 흔들기 (광고)">🌀</button>
+      <button id="btnClean" class="ad" title="동전 제거 (광고)">🧹</button>
+    </div>
+
+    <div id="menu" class="overlay">
+      <button id="btnRank" title="랭킹">🏆</button>
+      <div class="sheet">
+        <h1>💰 머니 게임</h1>
+        <p>같은 돈끼리 부딪히면 더 큰 돈이 돼요!<br>돈을 떨어뜨려서 제일 큰 돈을 만들어 보세요.</p>
+        <button class="mode" data-mode="krw">▶️ 게임시작</button>
+        <div class="chainBox"><div class="cap">진화 순서</div><div class="chain" id="chainKrw"></div></div>
+      </div>
+    </div>
+
+    <div id="over" class="overlay hidden">
+      <div class="sheet">
+        <h2>😵 게임 오버!</h2>
+        <div class="sub">모은 돈</div>
+        <div class="big" id="finalScore"></div>
+        <div class="sub" id="finalBest"></div>
+        <button class="act" id="btnRevive">📺 광고 보고 부활 (동전 제거)</button>
+        <button class="act" id="btnAgain">다시하기</button>
+        <button class="act" id="btnMenu">처음으로</button>
+      </div>
+    </div>
+
+    <div id="adConfirm" class="overlay hidden">
+      <div class="sheet">
+        <h2>📺 광고 보기</h2>
+        <p id="adConfirmText"></p>
+        <button class="act" id="btnAdOk">광고 보고 사용하기</button>
+        <button class="act" id="btnAdCancel">취소</button>
+      </div>
+    </div>
+
+    <div id="adPlay" class="overlay dark hidden">
+      <div class="sheet">
+        <div id="adBox">📺 테스트 광고<span class="adSmall">TEST AD</span></div>
+        <div id="adCount">3</div>
+        <p class="sub">잠시 후 기능이 실행됩니다…</p>
+      </div>
+    </div>
+
+    <div id="rank" class="overlay hidden">
+      <div id="rankPanel">
+        <div id="rankHead">
+          <h2>🏆 랭킹</h2>
+          <button id="btnRankClose" title="닫기">✕</button>
+        </div>
+        <div id="rankTabs">
+          <button data-tab="week" class="active">이번주</button>
+          <button data-tab="month">이번달</button>
+          <button data-tab="hall">명예의전당</button>
+        </div>
+        <div id="rankList"></div>
+      </div>
+    </div>
+    </div><!-- /gameArea -->
+
+    <div id="adBanner">AD · 배너 광고 영역 (320×50)</div>
+  </div>
+
+  <script src="lib/matter.min.js"></script>
+  <script src="lib/supabase.min.js"></script>
+  <script src="js/supabase-init.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/ranking.js"></script>
+</body>
+</html>
