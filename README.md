@@ -93,6 +93,8 @@
 - **보상형** (통 흔들기 / 동전 제거 / 부활 공용): 미리 로드해 두고(`loadFullScreenAd`),
   버튼을 누르면 표시(`showFullScreenAd`). **광고를 끝까지 봐서 `userEarnedReward`가 온 경우에만**
   기능이 실행되고 횟수가 차감됩니다. 중간에 닫으면 차감 없이 취소됩니다.
+  횟수 차감·배지 갱신은 보상 확정 즉시 반영되고, 기능 실행은 광고를 닫고 게임으로
+  돌아온 시점(`dismissed`, 없으면 웹뷰 복귀 감지 → 최후 10초 타임아웃)에 일어납니다.
 - 현재는 **공식 테스트 광고 ID**(`ait-ad-test-banner-id`, `ait-ad-test-rewarded-id`)가 설정되어
   있습니다. 출시 전에 `js/toss-ads.js` 상단 `AD_GROUP`을 콘솔에서 발급받은 실제
   광고 그룹 ID로 교체하세요.

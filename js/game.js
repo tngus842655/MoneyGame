@@ -577,8 +577,19 @@ function playRewardedAd(bridge) {
   document.getElementById('adCount').classList.add('hidden');
   document.getElementById('adPlayMsg').textContent = '📺 광고 불러오는 중…';
   adPlayEl.classList.remove('hidden');
+  let charged = false;   // onEarned에서 횟수를 이미 차감했는지 (onFinish 중복 차감 방지)
   bridge.showRewarded({
     onShow: () => adPlayEl.classList.add('hidden'),   // 네이티브 광고가 화면을 덮음
+    // 보상 확정 즉시 횟수 차감 + 배지 갱신 — 일부 토스앱은 dismissed가 늦거나
+    // 안 와서(최대 10초 타임아웃) onFinish만 기다리면 차감 표시가 한참 늦게 보임
+    onEarned: () => {
+      const action = pendingAdAction;
+      if (action && action !== 'revive' && state === 'playing' && featUses[action] > 0) {
+        featUses[action]--;
+        updateFeatUi();
+        charged = true;
+      }
+    },
     onFinish: (earned) => {
       const action = pendingAdAction;
       closeAd();
@@ -589,9 +600,11 @@ function playRewardedAd(bridge) {
       blip(880, 0.12, 'triangle', 0.1);
       if (action === 'revive') {
         if (state === 'over' && !reviveUsed) doRevive();
-      } else if (state === 'playing' && action && featUses[action] > 0) {
-        featUses[action]--;
-        updateFeatUi();
+      } else if (state === 'playing' && action && (charged || featUses[action] > 0)) {
+        if (!charged) {          // onEarned를 못 받은 경우의 안전망 (기존 동작)
+          featUses[action]--;
+          updateFeatUi();
+        }
         if (action === 'shake') startShake();
         else if (action === 'clean') cleanCoins();
       }
