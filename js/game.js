@@ -650,6 +650,10 @@ function startGame(modeKey) {
   mode = MODES[modeKey];
   if (!engine) initEngine();
   resetBoard();
+  // 지난 판/지난 세션에서 자동 드롭을 켜둔 채 시작하면 사용법을 한 번 상기
+  if (autoDrop) {
+    floatTexts.push({ x: W / 2, y: 300, text: '자동 드롭 ON — 꾹 누르고 있으면 계속 떨어져요', t: 0, life: 2000, size: 15, color: '#e8961e' });
+  }
   state = 'playing';
   playBgm();
   document.getElementById('menu').classList.add('hidden');
@@ -1248,6 +1252,10 @@ btnAuto.addEventListener('click', () => {
   autoDrop = !autoDrop;
   btnAuto.classList.toggle('on', autoDrop);
   try { localStorage.setItem('money-merge-auto', autoDrop ? '1' : '0'); } catch (e) {}
+  // 아이콘만으로는 "꾹 누르면 자동"이 전달되지 않아, 토글할 때마다 사용법을 화면에 안내
+  floatTexts.push(autoDrop
+    ? { x: W / 2, y: 300, text: '자동 드롭 ON — 꾹 누르고 있으면 계속 떨어져요!', t: 0, life: 2000, size: 16, color: '#e8961e' }
+    : { x: W / 2, y: 300, text: '자동 드롭 OFF', t: 0, life: 1100, size: 15, color: '#8a90a5' });
 });
 const btnShake = document.getElementById('btnShake');
 const btnClean = document.getElementById('btnClean');
