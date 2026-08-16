@@ -106,6 +106,7 @@ const sfx = {
   merge: t  => { blip(300 + t * 70, 0.12, 'triangle', 0.13, 1.5); blip((300 + t * 70) * 1.5, 0.1, 'triangle', 0.09, 1.4, 0.05); },
   jackpot: () => { [520, 660, 780, 1040].forEach((f, i) => blip(f, 0.16, 'triangle', 0.12, 1.1, i * 0.09)); },
   over: () => { [440, 350, 262].forEach((f, i) => blip(f, 0.22, 'sine', 0.12, 0.9, i * 0.18)); },
+  record: () => { [523, 659, 784, 1047, 1319].forEach((f, i) => blip(f, 0.14, 'triangle', 0.12, 1.05, i * 0.07)); },
 };
 
 // 배경음악: 플레이 중에만 작게 깔림 (메뉴/게임오버/광고/백그라운드에서는 일시정지)
@@ -270,10 +271,20 @@ function processMerges(now) {
 function addScore(v) {
   score += v;
   if (score > best[mode.key]) {
-    if (roundStartBest > 0 && score > roundStartBest) newRecord = true;
+    if (roundStartBest > 0 && score > roundStartBest && !newRecord) {
+      newRecord = true;
+      celebrateNewRecord();   // 이번 판에서 처음 넘어서는 순간 한 번만
+    }
     best[mode.key] = score;
     try { localStorage.setItem('money-merge-best-' + mode.key, String(score)); } catch (e) {}
   }
+}
+
+// 🎉 최고 기록을 갱신하는 순간의 알림 연출
+function celebrateNewRecord() {
+  floatTexts.push({ x: W / 2, y: 260, text: '🎉 최고 기록 갱신!', t: 0, life: 2200, size: 30, color: '#e0608a' });
+  spawnBurst(W / 2, 260, 40, ['#ffd76e', '#ffe9a8', '#fff', '#f7b2c4']);
+  sfx.record();
 }
 
 // 2.5초 안에 연달아 합치면 콤보 — 콤보당 +10% 보너스 (최대 +100%)
@@ -935,10 +946,16 @@ function drawHud() {
   ctx.font = `800 21px ${FONT}`;
   ctx.fillText(mode.format(score), W / 2, py + 36);
 
-  // best
-  ctx.fillStyle = 'rgba(110,120,145,0.85)';
-  ctx.font = `700 12px ${FONT}`;
-  ctx.fillText('👑 최고 ' + mode.format(best[mode.key]), W / 2, py + ph + 13);
+  // best (이번 판에서 기록 갱신 중이면 강조)
+  if (newRecord) {
+    ctx.fillStyle = `rgba(224,96,138,${0.7 + 0.3 * Math.sin(performance.now() / 180)})`;
+    ctx.font = `800 12px ${FONT}`;
+    ctx.fillText('🎉 새 기록 ' + mode.format(best[mode.key]), W / 2, py + ph + 13);
+  } else {
+    ctx.fillStyle = 'rgba(110,120,145,0.85)';
+    ctx.font = `700 12px ${FONT}`;
+    ctx.fillText('👑 최고 ' + mode.format(best[mode.key]), W / 2, py + ph + 13);
+  }
 
   const hudNow = performance.now();
   if (combo >= 2 && hudNow < comboExpires) {
