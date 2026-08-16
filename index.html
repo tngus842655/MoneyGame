@@ -13,11 +13,10 @@
     --sab: env(safe-area-inset-bottom, 0px);
     --sal: env(safe-area-inset-left, 0px);
     --sar: env(safe-area-inset-right, 0px);
-    --pill: 0px; /* 토스 네이티브 더보기(⋯)·닫기(X) 버튼을 피하는 우상단 여백 */
   }
   /* 토스 전체화면: 상태바 뒤 영역이 캔버스와 한 색으로 이어지게 배경을 맞추고
      (전환은 game.js syncPageBg), 카드 모서리/그림자를 없애 화면 한 장처럼 보이게 */
-  body.in-toss { --pill: 52px; background:#d4edfb; }
+  body.in-toss { background:#d4edfb; }
   body.in-toss canvas { border-radius:0; box-shadow:none; }
   body.in-toss .overlay { border-radius:0; }
   body.in-toss #adBanner { border-radius:0; box-shadow:none; }
@@ -161,8 +160,9 @@
   }
 
   /* ranking */
+  /* 홈 화면 랭킹 버튼 — 좌상단 (우상단은 토스 네이티브 ⋯/X 자리) */
   #btnRank {
-    position:absolute; top:calc(12px + var(--pill)); right:12px; width:46px; height:46px; border-radius:50%;
+    position:absolute; top:12px; left:12px; width:46px; height:46px; border-radius:50%;
     border:2px solid #fff; background:#ffd76e; font-size:21px; cursor:pointer;
     box-shadow:0 3px 8px rgba(80,60,20,.25); touch-action:manipulation; z-index:1;
   }

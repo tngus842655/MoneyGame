@@ -116,11 +116,29 @@ const sfx = {
 };
 
 // 배경음악: 플레이 중에만 작게 깔림 (메뉴/게임오버/광고/백그라운드에서는 일시정지)
+const BGM_VOL = 0.08;   // 효과음이 묻히지 않는 배경음악 볼륨
 const bgm = new Audio('public/bgm/puzzle.mp3');
 bgm.loop = true;
-bgm.volume = 0.08;   // 효과음이 묻히지 않게 배경음악은 더 작게 (0.15 → 0.08)
+// iOS 웹뷰는 <audio>의 volume 속성을 무시하고 항상 최대 볼륨으로 재생한다.
+// 실제로 줄이려면 WebAudio 게인 노드를 거쳐야 함 — 연결 성공 시 element 볼륨은
+// 1로 두고 게인으로만 조절, 실패(구형 브라우저 등) 시 volume 폴백.
+bgm.volume = BGM_VOL;
+let bgmGain = null;
+function ensureBgmChain() {
+  if (bgmGain || !audioCtx) return;
+  try {
+    const src = audioCtx.createMediaElementSource(bgm);   // 엘리먼트당 1회만 가능
+    bgmGain = audioCtx.createGain();
+    bgmGain.gain.value = BGM_VOL;
+    src.connect(bgmGain);
+    bgmGain.connect(audioCtx.destination);
+    bgm.volume = 1;   // 게인과 이중으로 줄지 않게
+  } catch (e) {}      // 실패하면 volume(0.08) 폴백 유지
+}
 function playBgm() {
   if (bgmMuted) return;
+  ensureAudio();
+  ensureBgmChain();
   const p = bgm.play();
   if (p && p.catch) p.catch(() => {});   // 자동재생 차단 등 실패는 조용히 무시
 }
