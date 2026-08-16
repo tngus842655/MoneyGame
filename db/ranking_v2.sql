@@ -95,7 +95,32 @@ as $$
   limit 100
 $$;
 
--- 5) 닉네임 변경: 기존 rename_player를 새 테이블 기준으로 교체 ---------------
+-- 5) 내 순위 조회: 해당 구간에서 내 등수와 점수 -------------------------------
+--    TOP 100 밖이어도 등수를 알 수 있게 한다. 기록이 없으면 0행 반환.
+--    (클라이언트는 받아온 목록 안에 내가 있으면 호출을 생략하고 위치로 계산)
+--    ※ 추가 적용 시 이 블록과 아래 grant의 get_my_rank 줄만 실행하면 된다.
+create or replace function get_my_rank(p_period text, p_player_id uuid)
+returns table (rank bigint, score bigint)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with bucket as (
+    select b.player_id, b.score
+    from best_scores b
+    where (p_period = 'week'  and b.period = 'week'  and b.period_start = kst_week_start())
+       or (p_period = 'month' and b.period = 'month' and b.period_start = kst_month_start())
+       or (p_period = 'hall'  and b.period = 'month'
+           and b.period_start = (kst_month_start() - interval '1 month')::date)
+  )
+  select (select count(*) + 1 from bucket where bucket.score > mine.score) as rank,
+         mine.score
+  from bucket mine
+  where mine.player_id = p_player_id
+$$;
+
+-- 6) 닉네임 변경: 기존 rename_player를 새 테이블 기준으로 교체 ---------------
 create or replace function rename_player(p_player_id uuid, p_nickname text)
 returns void
 language sql
@@ -111,12 +136,14 @@ $$;
 
 revoke all on function submit_score(uuid, text, bigint) from public;
 revoke all on function get_ranking(text, uuid) from public;
+revoke all on function get_my_rank(text, uuid) from public;
 revoke all on function rename_player(uuid, text) from public;
 grant execute on function submit_score(uuid, text, bigint) to anon, authenticated;
 grant execute on function get_ranking(text, uuid) to anon, authenticated;
+grant execute on function get_my_rank(text, uuid) to anon, authenticated;
 grant execute on function rename_player(uuid, text) to anon, authenticated;
 
--- 6) (선택) 기존 scores 데이터 이관 ------------------------------------------
+-- 7) (선택) 기존 scores 데이터 이관 ------------------------------------------
 -- 쌓여 있는 행들을 주/월 버킷별 최고기록 1개씩으로 요약해 옮깁니다.
 -- player_id가 없는 옛 행은 닉네임을 시드로 한 고정 uuid로 묶습니다.
 -- scores 테이블이 이미 삭제됐으면 자동으로 건너뛰므로, 이 파일 전체를
@@ -152,7 +179,7 @@ begin
 end
 $migrate$;
 
--- 7) (선택) 정리 --------------------------------------------------------------
+-- 8) (선택) 정리 --------------------------------------------------------------
 -- 이관을 확인했으면 기존 테이블은 삭제해도 됩니다 (클라이언트는 rpc만 사용):
 -- drop table if exists scores;
 --

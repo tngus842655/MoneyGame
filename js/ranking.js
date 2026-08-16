@@ -83,6 +83,16 @@ const API = {
     if (error) throw error;
   },
 
+  // 해당 구간에서 내 등수·점수 조회 (TOP 100 밖이어도 등수 확인용).
+  // 기록이 없으면 null. 받아온 목록 안에 내가 있으면 호출자가 이걸 부를 필요 없음.
+  async fetchMyRank(period) {
+    const sb = window.supabaseClient;
+    if (!sb) return null;   // 목 모드: 서버 없음
+    const { data, error } = await sb.rpc('get_my_rank', { p_period: period, p_player_id: playerId() });
+    if (error || !data || !data.length) return null;
+    return { rank: data[0].rank, score: data[0].score };
+  },
+
   // 닉네임 변경 시 내가 남긴 과거 기록의 닉네임도 함께 갱신.
   // anon에 update 권한을 주지 않기 위해 security definer 함수(rename_player)를 호출한다.
   async renamePlayer(nickname) {
@@ -144,9 +154,12 @@ function mockRanking(period) {
 // ================================================================ 랭킹 화면
 const rankEl = document.getElementById('rank');
 const listEl = document.getElementById('rankList');
+const myPosEl = document.getElementById('rankMyPos');
 const tabBtns = [...document.querySelectorAll('#rankTabs button')];
+const TAB_LABEL = { week: '이번주', month: '이번달', hall: '지난달' };
 let curTab = 'week';
 const cache = {};
+const meCache = {};   // 탭별 내 순위 { rank, score } | null(기록 없음), undefined=미조회
 
 const fmt = v => v.toLocaleString('ko-KR') + '원';
 
@@ -208,15 +221,33 @@ function rowSimple(r, rank, hot) {
   return d;
 }
 
+// 상단 "내 순위" 줄 — 목록 안에 내가 있으면 위치로 바로 계산하고,
+// TOP 100 밖일 때만 서버(get_my_rank)에 물어본다.
+function renderMyPos(tab) {
+  const me = meCache[tab];
+  if (me === undefined) { myPosEl.textContent = ''; return; }   // 아직 조회 전
+  if (!me) { myPosEl.textContent = `${TAB_LABEL[tab]} 내 순위: 기록 없음`; return; }
+  myPosEl.innerHTML = `${TAB_LABEL[tab]} 내 순위: <b>${me.rank}위</b> · ${fmt(me.score)}`;
+}
+
+async function loadMyPos(tab, rows) {
+  const idx = (rows || []).findIndex(r => r.me);
+  if (idx !== -1) { meCache[tab] = { rank: idx + 1, score: rows[idx].score }; return; }
+  try { meCache[tab] = await API.fetchMyRank(tab); } catch (e) { meCache[tab] = null; }
+}
+
 async function select(tab) {
   curTab = tab;
   tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   listEl.innerHTML = '';
   listEl.appendChild(el('rankMsg', '불러오는 중…'));
+  renderMyPos(tab);
   try {
     if (!cache[tab]) cache[tab] = await API.fetchRanking(tab);
     if (curTab !== tab) return;                    // 로딩 중 탭 전환 시 무시
     renderList(tab, cache[tab]);
+    if (meCache[tab] === undefined) await loadMyPos(tab, cache[tab]);
+    if (curTab === tab) renderMyPos(tab);
   } catch (e) {
     if (curTab !== tab) return;
     listEl.innerHTML = '';
@@ -226,11 +257,13 @@ async function select(tab) {
 
 function reload() {
   for (const k of Object.keys(cache)) delete cache[k];
+  for (const k of Object.keys(meCache)) delete meCache[k];
   select(curTab);
 }
 
 function open() {
   for (const k of Object.keys(cache)) delete cache[k];   // 열 때마다 새로 조회
+  for (const k of Object.keys(meCache)) delete meCache[k];
   refreshNickDisplays();
   rankEl.classList.remove('hidden');
   select(curTab);
