@@ -120,7 +120,7 @@ const API = {
         .select('nickname, score')
         .gte('created_at', since)
         .order('score', { ascending: false })
-        .limit(1000);
+        .limit(100);
       if (error) throw error;
       return data;
     }
@@ -211,7 +211,7 @@ const API = {
 
 // ================================================================ 목데이터 (Supabase 연동 전 UI 확인용)
 function mockRanking(period) {
-  const count = period === 'hall' ? 100 : 1000;
+  const count = 100;   // 모든 탭 TOP 100
   let seed = period === 'hall' ? 77 : period === 'week' ? 11 : 33;
   const rand = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
   let s = period === 'week' ? 4200000 : period === 'month' ? 9800000 : 15000000;

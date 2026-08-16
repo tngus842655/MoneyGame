@@ -65,8 +65,9 @@ begin
 end
 $$;
 
--- 4) 랭킹 조회: week/month는 현재 버킷, hall은 지난달 month 버킷 TOP 100 -----
+-- 4) 랭킹 조회: week/month는 현재 버킷, hall은 지난달 month 버킷 — 모두 TOP 100
 --    p_player_id를 넘기면 내 행에 is_me=true가 찍힌다 (player_id 자체는 비노출).
+--    ※ 이 함수만 바뀐 경우 이 블록만 다시 실행하면 된다 (create or replace).
 create or replace function get_ranking(p_period text, p_player_id uuid default null)
 returns table (nickname text, score bigint, is_me boolean)
 language sql
@@ -82,7 +83,7 @@ as $$
      or (p_period = 'hall'  and b.period = 'month'
          and b.period_start = (kst_month_start() - interval '1 month')::date)
   order by b.score desc
-  limit case when p_period = 'hall' then 100 else 1000 end
+  limit 100
 $$;
 
 -- 5) 닉네임 변경: 기존 rename_player를 새 테이블 기준으로 교체 ---------------
