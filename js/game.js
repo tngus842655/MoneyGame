@@ -1058,14 +1058,16 @@ function drawHud() {
     ctx.fillText(`⚠️ ${(remain / 1000).toFixed(1)}초`, W / 2, by - 11);
   }
 
-  // next preview
-  const nx = W - 46, ny = 47;
+  // next preview — 토스 안에서는 우상단 네이티브 더보기(⋯)·닫기(X) 버튼을 피해
+  // 원을 아래로 내리고 '다음' 라벨도 원 아래에 그린다
+  const inToss = document.body.classList.contains('in-toss');
+  const nx = W - 46, ny = inToss ? 89 : 47;
   ctx.beginPath(); ctx.arc(nx, ny, 30, 0, TAU);
   ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fill();
   ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(247,143,179,0.9)'; ctx.stroke();
   ctx.fillStyle = '#8a90a5';
   ctx.font = `700 11px ${FONT}`;
-  ctx.fillText('다음', nx, ny - 40);
+  ctx.fillText('다음', nx, inToss ? ny + 44 : ny - 40);
   const nDef = mode.tiers[queue[1]];
   const sc = Math.min(1, 22 / halfW(nDef));
   ctx.save();
@@ -1312,7 +1314,11 @@ function fit() {
   // 하단 배너 높이 실측: 자리표시자 60px / 토스 실배너 96px (+마진 2px)
   const adEl = document.getElementById('adBanner');
   const bannerH = (adEl.offsetHeight || 60) + 2;
-  let s = Math.min(window.innerWidth / W, (window.innerHeight - bannerH) / H);
+  // 전체화면 웹뷰에서는 body 패딩이 safe area(상태바/홈 인디케이터) 몫 — 가용 영역에서 제외
+  const bodyCS = getComputedStyle(document.body);
+  const padV = (parseFloat(bodyCS.paddingTop) || 0) + (parseFloat(bodyCS.paddingBottom) || 0);
+  const padH = (parseFloat(bodyCS.paddingLeft) || 0) + (parseFloat(bodyCS.paddingRight) || 0);
+  let s = Math.min((window.innerWidth - padH) / W, (window.innerHeight - padV - bannerH) / H);
   if (!isFinite(s) || s <= 0) s = 1;
   canvas.style.width = W * s + 'px';
   canvas.style.height = H * s + 'px';

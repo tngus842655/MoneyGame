@@ -6,10 +6,21 @@
 <title>머니 게임</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  /* 전체화면(투명 내비게이션 바) 대응: 상태바/홈 인디케이터 안전 영역.
+     기본값은 env() — 토스 안에서는 js/toss-safearea.js가 SDK 값으로 덮어씀 */
+  :root {
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+    --pill: 0px; /* 토스 네이티브 더보기(⋯)·닫기(X) 버튼을 피하는 우상단 여백 */
+  }
+  body.in-toss { --pill: 52px; }
   html, body { height:100%; overflow:hidden; }
   body {
     background:#9fc6e8;
     display:flex; align-items:center; justify-content:center;
+    padding:var(--sat) var(--sar) var(--sab) var(--sal);
     font-family:"Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
     user-select:none; -webkit-user-select:none;
   }
@@ -34,6 +45,8 @@
   #hud, #hudR { position:absolute; display:flex; flex-direction:column; gap:8px; line-height:normal; }
   #hud  { top:10px; left:10px; }
   #hudR { top:88px; right:10px; }
+  /* 토스 안: '다음' 미리보기가 네이티브 ⋯/X 버튼을 피해 내려오므로(game.js) 그 아래로 */
+  body.in-toss #hudR { top:136px; }
   #hud button, #hudR button {
     position:relative; width:38px; height:38px; border-radius:50%; border:2px solid rgba(255,255,255,.9);
     background:rgba(255,255,255,.55); font-size:18px; cursor:pointer; touch-action:manipulation;
@@ -117,12 +130,12 @@
 
   /* ranking */
   #btnRank {
-    position:absolute; top:12px; right:12px; width:46px; height:46px; border-radius:50%;
+    position:absolute; top:calc(12px + var(--pill)); right:12px; width:46px; height:46px; border-radius:50%;
     border:2px solid #fff; background:#ffd76e; font-size:21px; cursor:pointer;
     box-shadow:0 3px 8px rgba(80,60,20,.25); touch-action:manipulation; z-index:1;
   }
   #btnRank:active { transform:scale(.92); }
-  #rankPanel { display:flex; flex-direction:column; width:100%; height:100%; padding:12px 12px 8px; line-height:normal; }
+  #rankPanel { display:flex; flex-direction:column; width:100%; height:100%; padding:calc(12px + var(--pill)) 12px 8px; line-height:normal; }
   #rankHead { display:flex; align-items:center; justify-content:space-between; }
   #rankHead h2 { font-size:22px; color:#5b4636; }
   #btnRankClose {
@@ -285,6 +298,7 @@
   <script src="lib/matter.min.js"></script>
   <script src="lib/supabase.min.js"></script>
   <script src="lib/apps-in-toss.min.js"></script>
+  <script src="js/toss-safearea.js"></script>
   <script src="js/supabase-init.js"></script>
   <script src="js/toss-ads.js"></script>
   <script src="js/game.js"></script>
