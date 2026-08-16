@@ -35,6 +35,9 @@
 - 쓰기/읽기 모두 security definer 함수(`submit_score` / `get_ranking`)로만 접근
   (anon 직접 접근 차단 → player_id 비노출, 임의 update 차단)
 - `get_ranking`에 내 player_id를 넘기면 내 행에 `is_me`가 찍혀 목록에서 강조 표시
+- **실시간 반영**: 플레이 중 점수가 오르면 약 20초 간격으로 랭킹에 반영
+  (v2에서만 동작 — v1은 행이 쌓여서 게임오버/이탈 시에만 저장.
+  홈/다시하기/게임오버/탭 이탈 시에는 그 시점 점수가 즉시 저장됨)
 - 닉네임 변경은 `rename_player` 함수가 best_scores 기준으로 일괄 갱신
 - 기존 `scores` 데이터 이관 쿼리 포함 (선택)
 

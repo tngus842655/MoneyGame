@@ -156,6 +156,19 @@ const API = {
     // 목 모드에서는 저장할 곳이 없으므로 무시 (내 최고 기록은 localStorage 기준으로 표시)
   },
 
+  // 플레이 중 실시간 랭킹 반영용. v2(upsert)에서만 전송한다 —
+  // v1은 호출마다 행이 새로 쌓여서 게임오버/이탈 시에만 저장하는 게 맞다.
+  async submitScoreLive(score) {
+    if (!score || score <= 0) return;
+    const sb = window.supabaseClient;
+    if (!sb || v2Supported === false) return;
+    const { error } = await sb.rpc('submit_score', {
+      p_player_id: playerId(), p_nickname: myName(), p_score: score,
+    });
+    if (!error) v2Supported = true;
+    else if (isMissingV2(error)) v2Supported = false;
+  },
+
   // 닉네임 변경 시 내가 남긴 과거 기록의 닉네임도 함께 갱신.
   // anon에 update 권한을 주지 않기 위해 security definer 함수(rename_player)를 호출한다.
   async renamePlayer(nickname) {
@@ -359,6 +372,7 @@ window.Ranking = {
   setName,
   refreshNickDisplays,
   submitScore: score => Promise.resolve(API.submitScore(score)).catch(() => {}),
+  submitScoreLive: score => Promise.resolve(API.submitScoreLive(score)).catch(() => {}),
   submitScoreBeacon: score => API.submitScoreBeacon(score),
 };
 })();

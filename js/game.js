@@ -153,6 +153,9 @@ let featUses = { shake: MAX_FEAT, clean: MAX_FEAT };
 let reviveUsed = false;      // 📺 부활은 한 판에 1회
 let scoreSubmitted = false;  // 랭킹 중복 제출 방지 (한 판에 1번만)
 let lastCheckpointScore = 0; // 백그라운드 전환 시 스냅샷 중복 방지용
+const LIVE_SUBMIT_MS = 20000; // 플레이 중 실시간 랭킹 반영 주기
+let lastLiveSubmitAt = 0;
+let lastLiveScore = 0;       // 마지막으로 실시간 반영한 점수 (오른 경우에만 재전송)
 let filling = false;         // ⏩ 자동 진행: 4/5 높이까지 동전 자동 투하
 let fillNextAt = 0;
 let fillSpawned = 0;
@@ -468,8 +471,8 @@ function requestConfirm(kind) {
   aiming = false;
   activePointerId = null;
   const texts = {
-    restart: { title: '🔄 다시하기', text: '지금 판을 처음부터 다시 시작할까요?\n진행 중인 점수는 사라져요!' },
-    home:    { title: '🏠 처음으로', text: '게임을 그만두고 첫 화면으로 나갈까요?\n진행 중인 점수는 사라져요!' },
+    restart: { title: '🔄 다시하기', text: '지금 판을 처음부터 다시 시작할까요?\n지금까지 모은 점수는 랭킹에 저장돼요.' },
+    home:    { title: '🏠 처음으로', text: '게임을 그만두고 첫 화면으로 나갈까요?\n지금까지 모은 점수는 랭킹에 저장돼요.' },
   };
   document.getElementById('confirmTitle').textContent = texts[kind].title;
   document.getElementById('confirmText').textContent = texts[kind].text;
@@ -610,6 +613,8 @@ function resetBoard() {
   reviveUsed = false;
   scoreSubmitted = false;
   lastCheckpointScore = 0;
+  lastLiveSubmitAt = performance.now();   // 시작 직후가 아니라 한 주기 뒤부터 반영
+  lastLiveScore = 0;
   setFilling(false);
   fillSpawned = 0;
   fillNextAt = 0;
@@ -673,6 +678,17 @@ function finalizeAbandon(beacon) {
   scoreSubmitted = true;
   if (beacon) window.Ranking.submitScoreBeacon(score);
   else window.Ranking.submitScore(score);
+}
+
+// 플레이 중 점수가 오르면 주기적으로 랭킹에 실시간 반영.
+// v2(upsert)에서만 실제 전송되므로 아무리 자주 보내도 아이디당 최고기록 1행만 유지된다.
+// (v1 폴백에서는 행이 판마다 늘어나는 문제 때문에 ranking.js가 조용히 건너뜀)
+function maybeLiveSubmit(now) {
+  if (score <= lastLiveScore || now - lastLiveSubmitAt < LIVE_SUBMIT_MS) return;
+  if (!window.Ranking || !window.Ranking.submitScoreLive) return;
+  lastLiveSubmitAt = now;
+  lastLiveScore = score;
+  window.Ranking.submitScoreLive(score);
 }
 
 // 탭 백그라운드 전환처럼 다시 돌아와 이어할 수도 있는 경우: 진행 상황을 스냅샷만 저장
@@ -1036,6 +1052,7 @@ function step(now, dt) {
         checkGameOver(now, dt);
       }
       if (combo && now >= comboExpires) combo = 0;
+      maybeLiveSubmit(now);
     }
   }
 }
