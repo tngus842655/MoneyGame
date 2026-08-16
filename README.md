@@ -112,14 +112,14 @@ npx http-server -p 5317 -c-1 .
 토스에 올릴 배포 번들(`.ait`)은 아래로 만듭니다:
 
 ```bash
-npm install        # 최초 1회
-npm run build      # dist/ 준비 + money-game.ait 생성
+npm install          # 최초 1회
+npm run build:toss   # dist/ 준비 + money-game.ait 생성
 ```
 
 - `apps-in-toss.config.ts`의 `appName`이 **콘솔에 등록한 appName과 같아야** 합니다.
 - 생성된 `money-game.ait`를 앱인토스 콘솔(출시하기)에 업로드 → QR 코드로 실기기 테스트 →
   검토 요청 → 출시 순서로 진행합니다.
-- CLI로 바로 올리려면 콘솔에서 API 키 발급 후 `npx ait token add`로 등록하고 `npm run deploy`.
+- CLI로 바로 올리려면 콘솔에서 API 키 발급 후 `npx ait token add`로 등록하고 `npm run deploy:toss`.
 - 번들은 압축 해제 기준 100MB 이하 제한. `dist/`와 `*.ait`는 커밋하지 않습니다(.gitignore).
 
 ## 배경음악

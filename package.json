@@ -2,8 +2,8 @@
   "name": "money-game",
   "private": true,
   "scripts": {
-    "build": "node scripts/make-dist.mjs && ait build",
-    "deploy": "ait deploy"
+    "build:toss": "node scripts/make-dist.mjs && ait build",
+    "deploy:toss": "ait deploy"
   },
   "dependencies": {
     "@apps-in-toss/web-framework": "^3.0.3"
