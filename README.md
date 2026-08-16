@@ -39,6 +39,42 @@
    - 게임오버 시 `scores`에 insert (닉네임은 localStorage `money-merge-nick`, 자동 생성)
    - 같은 유저 최고 기록만 남기려면 nickname unique + upsert 또는 뷰로 dedupe 권장
 
+### 닉네임 변경 시 과거 기록 갱신 (선택 마이그레이션)
+
+닉네임은 각 점수 행에 그대로 저장되므로, 이름을 바꿔도 과거 기록은 옛 이름으로 남습니다.
+아래 마이그레이션을 적용하면 이름 변경 시 **내가 남긴 과거 기록의 닉네임도 함께 갱신**됩니다.
+
+```sql
+-- 1) 기기별 플레이어 식별자 (localStorage 'money-merge-pid' 와 매칭)
+alter table scores add column if not exists player_id uuid;
+create index if not exists scores_player_id on scores (player_id);
+
+-- 2) player_id 는 남에게 노출되지 않도록 조회 대상에서 제외
+revoke select on scores from anon;
+grant select (id, nickname, score, created_at) on scores to anon;
+grant insert (nickname, score, player_id) on scores to anon;
+
+-- 3) 본인 기록의 닉네임만 바꾸는 함수
+--    (anon 에 update 권한을 주면 전체 랭킹을 덮어쓸 수 있으므로 함수로만 허용)
+create or replace function rename_player(p_player_id uuid, p_nickname text)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  update scores
+     set nickname = left(btrim(p_nickname), 10)
+   where player_id = p_player_id
+     and btrim(p_nickname) <> '';
+$$;
+
+revoke all on function rename_player(uuid, text) from public;
+grant execute on function rename_player(uuid, text) to anon;
+```
+
+적용 전에도 게임은 정상 동작합니다 — `ranking.js`가 `player_id` 컬럼/함수가 없으면
+자동으로 감지해 기존 방식(닉네임+점수만 저장)으로 폴백합니다.
+
 ## 시스템
 
 - **콤보**: 2.5초 안에 연달아 합치면 콤보가 쌓이고, 콤보당 +10% 보너스 점수 (최대 +100%)

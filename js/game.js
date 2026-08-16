@@ -140,6 +140,8 @@ let adCountdown = null;
 const MAX_FEAT = 3;          // 한 판에 흔들기/동전제거 각각 최대 사용 횟수
 let featUses = { shake: MAX_FEAT, clean: MAX_FEAT };
 let reviveUsed = false;      // 📺 부활은 한 판에 1회
+let scoreSubmitted = false;  // 랭킹 중복 제출 방지 (한 판에 1번만)
+let lastCheckpointScore = 0; // 백그라운드 전환 시 스냅샷 중복 방지용
 let filling = false;         // ⏩ 자동 진행: 4/5 높이까지 동전 자동 투하
 let fillNextAt = 0;
 let fillSpawned = 0;
@@ -556,6 +558,8 @@ function resetBoard() {
   closeAd();
   featUses = { shake: MAX_FEAT, clean: MAX_FEAT };
   reviveUsed = false;
+  scoreSubmitted = false;
+  lastCheckpointScore = 0;
   setFilling(false);
   fillSpawned = 0;
   fillNextAt = 0;
@@ -599,13 +603,33 @@ function checkGameOver(now, dt) {
 function gameOver() {
   state = 'over';
   sfx.over();
-  if (window.Ranking) window.Ranking.submitScore(score);   // 랭킹 서버에 기록 제출
+  if (!scoreSubmitted && window.Ranking) {
+    scoreSubmitted = true;
+    window.Ranking.submitScore(score);   // 랭킹 서버에 기록 제출
+  }
   const overEl = document.getElementById('over');
   document.getElementById('finalScore').textContent = mode.format(score);
   document.getElementById('finalBest').textContent =
     (newRecord ? '🎉 새 기록! ' : '👑 최고 기록 ') + mode.format(best[mode.key]);
   document.getElementById('btnRevive').classList.toggle('hidden', reviveUsed);
+  if (window.Ranking) window.Ranking.refreshNickDisplays();
   setTimeout(() => { if (state === 'over') overEl.classList.remove('hidden'); }, 600);
+}
+
+// 재시작/홈/탭종료처럼 이번 판이 확실히 끝나는 이탈: 그 시점 점수를 확정 제출
+function finalizeAbandon(beacon) {
+  if (state !== 'playing' || scoreSubmitted || score <= 0 || !window.Ranking) return;
+  scoreSubmitted = true;
+  if (beacon) window.Ranking.submitScoreBeacon(score);
+  else window.Ranking.submitScore(score);
+}
+
+// 탭 백그라운드 전환처럼 다시 돌아와 이어할 수도 있는 경우: 진행 상황을 스냅샷만 저장
+// (scoreSubmitted를 확정하지 않아, 나중에 진짜 게임오버로 이어지면 최종 점수가 정상 제출됨)
+function checkpointAbandon() {
+  if (state !== 'playing' || scoreSubmitted || score <= lastCheckpointScore || !window.Ranking) return;
+  lastCheckpointScore = score;
+  window.Ranking.submitScoreBeacon(score);
 }
 
 function goMenu() {
@@ -1040,8 +1064,14 @@ document.querySelectorAll('#menu button.mode').forEach(btn => {
 });
 document.getElementById('btnAgain').addEventListener('click', () => startGame(mode.key));
 document.getElementById('btnMenu').addEventListener('click', goMenu);
-document.getElementById('btnHome').addEventListener('click', goMenu);
-document.getElementById('btnRestart').addEventListener('click', () => { if (mode) startGame(mode.key); });
+document.getElementById('btnHome').addEventListener('click', () => { finalizeAbandon(false); goMenu(); });
+document.getElementById('btnRestart').addEventListener('click', () => { finalizeAbandon(false); if (mode) startGame(mode.key); });
+
+// 탭 종료/새로고침 시에도 진행 중이던 점수를 잃지 않도록 저장.
+// visibilitychange(hidden)는 백그라운드 전환에서도 뜨므로 확정 짓지 않고 스냅샷만 남겨
+// 다시 돌아와 이어하다 진짜 게임오버가 나면 최종 점수가 정상적으로 덮어 제출되게 한다.
+window.addEventListener('pagehide', () => finalizeAbandon(true));
+document.addEventListener('visibilitychange', () => { if (document.hidden) checkpointAbandon(); });
 document.getElementById('btnMute').addEventListener('click', function () {
   muted = !muted;
   this.textContent = muted ? '🔇' : '🔊';

@@ -15,6 +15,42 @@ function myName() {
   return n;
 }
 
+// 기기별 플레이어 식별자. 닉네임을 바꿔도 과거 기록을 함께 갱신하기 위해 사용.
+function playerId() {
+  let p = null;
+  try { p = localStorage.getItem('money-merge-pid'); } catch (e) {}
+  if (!p) {
+    p = (crypto.randomUUID && crypto.randomUUID()) ||
+      'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = (Math.random() * 16) | 0;
+        return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+      });
+    try { localStorage.setItem('money-merge-pid', p); } catch (e) {}
+  }
+  return p;
+}
+
+// 정식 회원가입 없이 닉네임만 유저가 직접 지정 (localStorage 기기별 저장)
+function setName(raw) {
+  const n = String(raw || '').trim().slice(0, 10);
+  if (!n) return false;
+  try { localStorage.setItem('money-merge-nick', n); } catch (e) {}
+  refreshNickDisplays();
+  // 과거 기록의 닉네임까지 갱신한 뒤, 열려 있는 랭킹 목록을 새로 고침
+  Promise.resolve(API.renamePlayer(n)).catch(() => {}).then(() => {
+    if (!rankEl.classList.contains('hidden')) reload();
+  });
+  return true;
+}
+
+function refreshNickDisplays() {
+  const n = myName();
+  const a = document.getElementById('rankMeName');
+  const b = document.getElementById('finalNickName');
+  if (a) a.textContent = n;
+  if (b) b.textContent = n;
+}
+
 // ================================================================ 기간 계산
 function startOfWeekISO() {
   const d = new Date();
@@ -48,6 +84,11 @@ function prevMonthRange() {
 // 3) window.supabaseClient 가 있으면 자동으로 실데이터를 쓰고, 없으면 목데이터로 동작합니다.
 //    ※ 같은 유저의 최고 기록만 남기려면 nickname unique + upsert 방식으로 바꾸거나
 //      뷰/rpc 로 dedupe 하는 걸 추천 (아래 쿼리는 단순 전체 삽입 기준).
+// player_id 컬럼/함수 적용 여부 (null=미확인). 마이그레이션 전에도 게임이 멈추지 않도록 자동 감지.
+let playerIdSupported = null;
+const isMissingPlayerId = e =>
+  /player_id/i.test((e && (e.message || e.details || e.hint)) || '');
+
 const API = {
   async fetchRanking(period) {   // 'week' | 'month' | 'hall'
     const sb = window.supabaseClient;
@@ -78,10 +119,50 @@ const API = {
     if (!score || score <= 0) return;
     const sb = window.supabaseClient;
     if (sb) {
-      const { error } = await sb.from('scores').insert({ nickname: myName(), score });
+      const row = { nickname: myName(), score };
+      if (playerIdSupported !== false) row.player_id = playerId();
+      let { error } = await sb.from('scores').insert(row);
+      if (error && isMissingPlayerId(error)) {
+        // player_id 컬럼 마이그레이션 전이면 닉네임/점수만으로 재시도
+        playerIdSupported = false;
+        ({ error } = await sb.from('scores').insert({ nickname: row.nickname, score }));
+      } else if (!error) {
+        playerIdSupported = true;
+      }
       if (error) throw error;
     }
     // 목 모드에서는 저장할 곳이 없으므로 무시 (내 최고 기록은 localStorage 기준으로 표시)
+  },
+
+  // 닉네임 변경 시 내가 남긴 과거 기록의 닉네임도 함께 갱신.
+  // anon에 update 권한을 주지 않기 위해 security definer 함수(rename_player)를 호출한다.
+  async renamePlayer(nickname) {
+    const sb = window.supabaseClient;
+    if (!sb || playerIdSupported === false) return;
+    const { error } = await sb.rpc('rename_player', { p_player_id: playerId(), p_nickname: nickname });
+    if (error) playerIdSupported = false;   // 함수/컬럼 미적용 상태면 이후 조용히 건너뜀
+  },
+
+  // 탭 종료/백그라운드 전환처럼 페이지가 곧 죽을 수 있는 시점 전용.
+  // supabase-js의 일반 fetch는 언로드 중 취소될 수 있어, keepalive fetch로 REST를 직접 호출.
+  submitScoreBeacon(score) {
+    if (!score || score <= 0) return;
+    const cfg = window.supabaseConfig;
+    if (!cfg) return;   // 목 모드: 저장할 서버가 없음
+    const row = { nickname: myName(), score };
+    if (playerIdSupported !== false) row.player_id = playerId();
+    try {
+      fetch(`${cfg.url}/rest/v1/scores`, {
+        method: 'POST',
+        keepalive: true,
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': cfg.anonKey,
+          'Authorization': `Bearer ${cfg.anonKey}`,
+        },
+        body: JSON.stringify(row),
+      }).catch(() => {});
+    } catch (e) {}
   },
 };
 
@@ -196,8 +277,14 @@ async function select(tab) {
   }
 }
 
+function reload() {
+  for (const k of Object.keys(cache)) delete cache[k];
+  select(curTab);
+}
+
 function open() {
   for (const k of Object.keys(cache)) delete cache[k];   // 열 때마다 새로 조회
+  refreshNickDisplays();
   rankEl.classList.remove('hidden');
   select(curTab);
 }
@@ -209,11 +296,39 @@ document.getElementById('btnRank').addEventListener('click', open);
 document.getElementById('btnRankClose').addEventListener('click', close);
 tabBtns.forEach(b => b.addEventListener('click', () => select(b.dataset.tab)));
 
+// ================================================================ 닉네임 편집
+const nickEl = document.getElementById('nickEditor');
+const nickInput = document.getElementById('nickInput');
+
+function openNickEditor() {
+  nickInput.value = myName();
+  nickEl.classList.remove('hidden');
+  setTimeout(() => nickInput.focus(), 0);
+}
+function closeNickEditor() {
+  nickEl.classList.add('hidden');
+}
+function saveNick() {
+  if (setName(nickInput.value)) closeNickEditor();
+  else nickInput.focus();
+}
+
+document.getElementById('btnEditNick1').addEventListener('click', openNickEditor);
+document.getElementById('btnEditNick2').addEventListener('click', openNickEditor);
+document.getElementById('btnNickSave').addEventListener('click', saveNick);
+document.getElementById('btnNickCancel').addEventListener('click', closeNickEditor);
+nickInput.addEventListener('keydown', e => { if (e.key === 'Enter') saveNick(); });
+
+refreshNickDisplays();
+
 // ================================================================ 외부 노출
 window.Ranking = {
   open,
   close,
   myName,
+  setName,
+  refreshNickDisplays,
   submitScore: score => Promise.resolve(API.submitScore(score)).catch(() => {}),
+  submitScoreBeacon: score => API.submitScoreBeacon(score),
 };
 })();

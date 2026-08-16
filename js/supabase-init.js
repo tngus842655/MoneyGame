@@ -6,4 +6,7 @@
   if (window.supabase && window.supabase.createClient) {
     window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   }
+  // 탭 종료 시 fetch(keepalive) 폴백용 — supabase-js 내부 클라이언트는 페이지 언로드 중
+  // 요청이 끊길 수 있어, REST 엔드포인트를 직접 호출하는 경량 경로를 별도로 노출
+  window.supabaseConfig = { url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY };
 })();

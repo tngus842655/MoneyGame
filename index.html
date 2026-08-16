@@ -53,8 +53,12 @@
 
   .overlay {
     position:absolute; inset:0; display:flex; overflow-y:auto; border-radius:12px; line-height:normal;
-    background:rgba(214,238,252,.92); backdrop-filter:blur(3px);
+    background:rgba(214,238,252,.92); backdrop-filter:blur(3px); z-index:10;
   }
+  /* 다른 오버레이 위에 겹쳐 뜨는 레이어 (문서 순서와 무관하게 항상 위로) */
+  #rank { z-index:20; }
+  #adConfirm, #adPlay { z-index:30; }
+  #nickEditor { z-index:40; }
   .overlay .sheet {
     margin:auto; display:flex; flex-direction:column; align-items:center;
     gap:14px; text-align:center; padding:24px 16px; width:100%;
@@ -73,8 +77,8 @@
   .overlay button:active { transform:translateY(2px); box-shadow:0 2px 0 rgba(0,0,0,.15); }
   button[data-mode="krw"] { background:#5fa8e8; }
   button[data-mode="usd"] { background:#67b984; }
-  #btnAgain, #btnAdOk { background:#f78fb3; }
-  #btnMenu, #btnAdCancel { background:#9aa5c4; }
+  #btnAgain, #btnAdOk, #btnNickSave { background:#f78fb3; }
+  #btnMenu, #btnAdCancel, #btnNickCancel { background:#9aa5c4; }
   #btnRevive { background:#67b984; }
 
   .chainBox { margin-top:2px; }
@@ -119,6 +123,18 @@
     width:34px; height:34px; border-radius:50%; border:2px solid #fff; background:rgba(255,255,255,.6);
     font-size:15px; color:#8a90a5; cursor:pointer; touch-action:manipulation;
   }
+  #rankMe { font-size:13px; color:#6b7480; margin-top:6px; }
+  #rankMe b { color:#5b4636; }
+  .miniEdit {
+    border:none; background:none; cursor:pointer; font-size:13px; padding:2px 4px;
+    vertical-align:middle; touch-action:manipulation; opacity:.75;
+  }
+  .miniEdit:active { transform:scale(.9); }
+  #nickInput {
+    width:min(230px, 82%); font-family:inherit; font-size:16px; text-align:center;
+    padding:11px 14px; border-radius:999px; border:2px solid #d9dfe5; outline:none; color:#5b4636;
+  }
+  #nickInput:focus { border-color:#f78fb3; }
   #rankTabs { display:flex; gap:6px; margin:10px 0; }
   #rankTabs button {
     flex:1; padding:9px 0; border-radius:999px; border:none; font-family:inherit;
@@ -190,6 +206,7 @@
         <div class="sub">모은 돈</div>
         <div class="big" id="finalScore"></div>
         <div class="sub" id="finalBest"></div>
+        <div class="sub">닉네임: <b id="finalNickName"></b> <button class="miniEdit" id="btnEditNick2" title="닉네임 수정">✏️</button></div>
         <button class="act" id="btnRevive">📺 광고 보고 부활 (동전 제거)</button>
         <button class="act" id="btnAgain">다시하기</button>
         <button class="act" id="btnMenu">처음으로</button>
@@ -213,12 +230,23 @@
       </div>
     </div>
 
+    <div id="nickEditor" class="overlay hidden">
+      <div class="sheet">
+        <h2>✏️ 닉네임 설정</h2>
+        <p>랭킹에 표시될 이름을 정해주세요</p>
+        <input id="nickInput" type="text" maxlength="10" placeholder="닉네임 입력 (최대 10자)" autocomplete="off">
+        <button class="act" id="btnNickSave">저장</button>
+        <button class="act" id="btnNickCancel">취소</button>
+      </div>
+    </div>
+
     <div id="rank" class="overlay hidden">
       <div id="rankPanel">
         <div id="rankHead">
           <h2>🏆 랭킹</h2>
           <button id="btnRankClose" title="닫기">✕</button>
         </div>
+        <div id="rankMe">닉네임: <b id="rankMeName"></b> <button class="miniEdit" id="btnEditNick1" title="닉네임 수정">✏️</button></div>
         <div id="rankTabs">
           <button data-tab="week" class="active">이번주</button>
           <button data-tab="month">이번달</button>
