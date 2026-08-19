@@ -590,10 +590,11 @@ function closeAd() {
   if (state === 'playing') playBgm();
 }
 
-// 토스 앱 안이면 실제 보상형 광고, 밖(일반 브라우저)이면 시뮬레이션 광고
+// 토스 앱·구글플레이 앱 안이면 실제 보상형 광고, 밖(일반 브라우저)이면 시뮬레이션 광고.
+// 브리지는 js/toss-ads.js 또는 js/admob-ads.js 중 하나가 올린다 (둘 다 같은 인터페이스).
 function playAd() {
   if (!pendingAdAction) return;   // 확인 팝업 흐름 밖에서 불리면 무시
-  const bridge = window.TossAdsBridge;
+  const bridge = window.AdsBridge;
   if (bridge && bridge.rewardedAvailable()) playRewardedAd(bridge);
   else playTestAd();
 }

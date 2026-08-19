@@ -57,6 +57,14 @@
     width:100vw !important; height:96px; display:block;
     border-radius:0; background:transparent; box-shadow:none; letter-spacing:0;
   }
+  /* 구글플레이(Capacitor) 네이티브 배너는 웹뷰 안이 아니라 그 위 화면 하단에 얹힌다.
+     기본 세로 가운데 정렬이면 자리표시자가 배너보다 한참 위에 떠서 어긋나므로 아래로 붙인다. */
+  body.in-app { align-items:flex-end; }
+  /* 네이티브 배너가 그 자리를 덮으므로 어두운 자리표시자는 지우고 높이(50dp)만 비워 둔다.
+     로드에 실패했을 때도 같은 클래스를 붙인다 — 자동 갱신으로 나중에 뜰 수 있어 자리는 남긴다. */
+  body.admob-banner #adBanner {
+    height:50px; background:transparent; box-shadow:none; letter-spacing:0;
+  }
 
   /* floating buttons */
   /* 좌우 버튼 열은 같은 높이에서 시작 — 토스 네이티브 ⋯/X(우상단, ~52px) 살짝 아래 */
@@ -358,7 +366,11 @@
   <script src="lib/capacitor.js"></script>
   <script src="js/toss-safearea.js"></script>
   <script src="js/supabase-init.js"></script>
+  <!-- 광고: ads-config가 ID를 정하고, 토스 → AdMob 순으로 자기 환경이면 window.AdsBridge를
+       차지한다. 순서를 바꾸면 토스 안에서 AdMob이 먼저 자리를 잡아 버린다. -->
+  <script src="js/ads-config.js"></script>
   <script src="js/toss-ads.js"></script>
+  <script src="js/admob-ads.js"></script>
   <script src="js/capacitor-bridge.js"></script>
   <script src="js/legal-link.js"></script>
   <script src="js/game.js"></script>

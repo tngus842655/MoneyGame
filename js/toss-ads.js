@@ -2,7 +2,8 @@
 // - 배너: TossAds.initialize → #adBanner 슬롯에 attachBanner
 // - 보상형: loadFullScreenAd로 미리 로드해 두고, 게임이 요청하면 showFullScreenAd
 // 토스 앱 밖(일반 브라우저)에서는 isSupported()가 false라서 아무것도 하지 않고,
-// 게임은 window.TossAdsBridge.rewardedAvailable() 검사를 거쳐 기존 테스트 광고로 폴백한다.
+// 게임은 window.AdsBridge가 없으면 시뮬레이션 광고로 폴백한다.
+// 구글플레이(Capacitor) 쪽 같은 역할은 js/admob-ads.js가 맡는다.
 (() => {
 'use strict';
 
@@ -205,8 +206,13 @@ function attachBanner() {
 // 시작: 배너 먼저(바로 보이는 지면), 이어서 보상형 미리 로드
 if (!startBanner()) loadRewarded();
 
-window.TossAdsBridge = {
-  rewardedAvailable: rewardedSupported,
-  showRewarded,
-};
+// 광고 브리지는 토스·AdMob 두 벌이 있고 게임은 window.AdsBridge 하나만 본다.
+// 토스 광고를 실제로 띄울 수 있을 때만 자리를 차지한다 — 그래야 다음에 로드되는
+// js/admob-ads.js가 "이미 브리지가 있으니 물러난다"는 판단을 제대로 할 수 있다.
+if (rewardedSupported()) {
+  window.AdsBridge = {
+    rewardedAvailable: rewardedSupported,
+    showRewarded,
+  };
+}
 })();

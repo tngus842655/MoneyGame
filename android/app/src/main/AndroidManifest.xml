@@ -34,9 +34,20 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- AdMob 앱 ID. 지금 값은 구글 공식 테스트 앱 ID다.
+             정식 출시로 승격하기 전에 AdMob 콘솔에서 발급받은 실제 앱 ID로 바꿀 것.
+             광고 단위 ID는 여기가 아니라 js/ads-config.js에 있다 (같이 바꿔야 함).
+             ⚠️ 이 meta-data가 없으면 앱이 시작하자마자 죽는다 (SDK가 실행 중 확인함). -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~3347511713" />
     </application>
 
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- play-services-ads가 매니페스트 병합으로 알아서 넣어 주지만, 데이터 안전 섹션에
+         '광고 ID 수집'을 신고해야 하는 근거라서 눈에 보이게 적어 둔다. -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
 </manifest>
