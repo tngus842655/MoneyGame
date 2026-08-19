@@ -154,16 +154,22 @@ npm run build:toss   # dist/ 준비 + money-game.ait 생성
 앱인토스와 **같은 `dist/`**를 안드로이드 앱으로 포장합니다. 웹 호스팅이 필요 없습니다 —
 게임 파일이 그대로 APK/AAB 안에 들어가고, 인터넷은 랭킹(Supabase)과 광고에만 씁니다.
 
-```bash
-npm install            # 최초 1회
-npm run build:android  # dist/ 준비 + 네이티브 프로젝트에 동기화
-npm run open:android   # 안드로이드 스튜디오 → Build > Generate Signed App Bundle (.aab)
+`.aab`를 뽑는 건 `android\`에서 두 줄입니다. 자세한 절차는 **[ANDROID_RELEASE.md](ANDROID_RELEASE.md)**.
+
+```
+gradlew.bat clean
+gradlew.bat bundleRelease
 ```
 
 - `android/`는 `npx cap add android`로 생성된 네이티브 프로젝트이며 커밋되어 있습니다.
-  게임 코드를 고친 뒤에는 **반드시 `npm run build:android`로 다시 동기화**해야 앱에 반영됩니다
+- **웹 자산 동기화는 gradle이 알아서 합니다** (`makeWebDist` → `capSync` → `preBuild`).
+  예전처럼 `npm run build:android`를 먼저 칠 필요가 없습니다 — 빼먹으면 앱 안에 예전 게임이
+  들어간 채로 올라가기 때문에 빌드에 묶어 두었습니다
   (`android/app/src/main/assets/public`은 복사본이라 커밋하지 않습니다).
-- 필요한 도구: Android Studio, JDK 21. compileSdk/targetSdk는 36 (플레이스토어 요구치 충족).
+- 서명 키가 없으면 릴리스 빌드가 **시작하자마자 멈추고** 만드는 방법을 알려줍니다.
+  미서명 `.aab`가 조용히 만들어져 업로드 화면에서야 막히는 일을 없애려는 것입니다.
+- 필요한 도구: JDK 21 + Android SDK(`android/local.properties`). **Android Studio는 필요 없습니다.**
+  compileSdk/targetSdk는 36 (플레이스토어 요구치 충족).
 - 패키지명은 `capacitor.config.js`의 `appId` (`com.moneygame.app`).
   **플레이스토어에 한 번 올리면 영구히 바꿀 수 없으니** 첫 업로드 전에 확정하세요.
   바꾸려면 `appId`를 고친 뒤 `rm -rf android && npm run android:add`.
@@ -177,16 +183,23 @@ npm run open:android   # 안드로이드 스튜디오 → Build > Generate Signe
 플레이 중(나가기 재확인) → 홈에서 두 번 누르면 종료. 광고 재생 중에는 무시합니다.
 리스너를 등록하지 않으면 뒤로가기 한 번에 앱이 꺼지므로 필수입니다.
 
-### 아직 남은 것 — 광고 수익화
+### 광고 — 환경마다 다른 브리지
 
-`js/toss-ads.js`는 **토스 앱 안에서만** 동작하므로, 플레이스토어 버전은 지금
-기존 3초 테스트 광고 화면으로 폴백됩니다 (기능·보상은 정상 동작, 광고 수익은 없음).
-수익화하려면 AdMob을 붙여야 합니다:
+게임은 `window.AdsBridge` 하나만 봅니다. 그 자리를 누가 차지하느냐가 환경에 따라 다릅니다.
 
-1. `npm i @capacitor-community/admob` 후 `npm run build:android`
-2. `js/toss-ads.js`의 폴백 경로(`TossAdsBridge.rewardedAvailable()`가 false일 때)에 AdMob 배너/보상형 연결
-3. `AndroidManifest.xml`에 AdMob 앱 ID `<meta-data>`와 `com.google.android.gms.permission.AD_ID` 권한 추가
-4. Play Console 데이터 안전 섹션에 광고 ID 수집 신고 + `docs/privacy.html`의 광고 항목 확인
+| 환경 | 브리지 | 광고 |
+| --- | --- | --- |
+| 토스 앱(앱인토스) | `js/toss-ads.js` | 앱인토스 배너 + 보상형 |
+| 구글플레이 앱(Capacitor) | `js/admob-ads.js` | AdMob 배너 + 보상형 |
+| 일반 브라우저 | 없음 | 게임 내 시뮬레이션 광고로 폴백 |
+
+로드 순서는 `index.html`에서 ads-config → toss-ads → admob-ads입니다. 토스 광고를
+띄울 수 있을 때만 `toss-ads.js`가 자리를 차지하고, 비어 있으면 `admob-ads.js`가 가져갑니다.
+
+**광고 단위 ID는 `js/ads-config.js` 한 곳에 있고, 지금은 구글 공식 테스트 ID입니다.**
+정식 출시로 승격하기 전에 `USE_TEST_ADS = false`로 바꾸고 실제 ID를 채워야 합니다.
+AdMob 앱 ID는 네이티브 쪽이라 `AndroidManifest.xml`에서 따로 바꿔야 합니다.
+자세한 절차는 `PLAY_CONSOLE.md`에 있습니다.
 
 ## 개인정보처리방침 (docs/)
 
