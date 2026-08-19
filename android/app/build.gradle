@@ -21,19 +21,27 @@ tasks.register('makeWebDist', Exec) {
     outputs.dir(new File(webRoot, 'dist'))
 }
 
-// dist/ → android/app/src/main/assets/public 복사 + 플러그인 목록 갱신.
+// dist/ → android/app/src/main/assets/public 복사 + capacitor.config/plugins json 갱신.
 // npx 대신 CLI 진입점을 node로 직접 부른다 (npx는 셸·경로 해석이 환경마다 달라진다).
-tasks.register('capSync', Exec) {
+//
+// `sync`가 아니라 `copy`인 이유: sync는 copy + update이고, update가
+// capacitor-cordova-android-plugins/ 모듈을 통째로 다시 만든다. 그 모듈의 build/까지
+// 지우는데, gradle이 이미 만들어 둔 R 파일이 거기 있어서 assembleRelease가
+//   processReleaseResources > ... package-aware-r.txt (없음)
+// 으로 죽는다. bundleRelease는 자원 처리 경로가 달라 우연히 살아남았다.
+// 플러그인을 더하거나 뺐을 때만 `npm run build:android`(전체 sync)를 한 번 돌리면 된다 —
+// 그건 npm install을 동반하는 드문 작업이다.
+tasks.register('capCopy', Exec) {
     group = 'capacitor'
-    description = 'dist/를 안드로이드 프로젝트로 동기화한다 (cap sync)'
+    description = 'dist/를 안드로이드 프로젝트로 복사한다 (cap copy)'
     dependsOn 'makeWebDist'
     workingDir = webRoot
-    commandLine 'node', 'node_modules/@capacitor/cli/bin/capacitor', 'sync', 'android'
+    commandLine 'node', 'node_modules/@capacitor/cli/bin/capacitor', 'copy', 'android'
 }
 
 // Exec 태스크는 PATH에서 node를 찾는데, 윈도우에서는 node.exe다. 확장자 없이도
 // 대개 찾지만 확실히 하려고 실행 직전에 한 번 확인한다.
-[tasks.named('makeWebDist'), tasks.named('capSync')].each { t ->
+[tasks.named('makeWebDist'), tasks.named('capCopy')].each { t ->
     t.configure {
         doFirst {
             if (isWindows) { environment 'PATHEXT', System.getenv('PATHEXT') ?: '.COM;.EXE;.BAT;.CMD' }
@@ -42,7 +50,7 @@ tasks.register('capSync', Exec) {
 }
 
 project.afterEvaluate {
-    tasks.named('preBuild').configure { dependsOn 'capSync' }
+    tasks.named('preBuild').configure { dependsOn 'capCopy' }
 }
 
 // ── 서명 ───────────────────────────────────────────────────────────────────
