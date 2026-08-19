@@ -130,6 +130,17 @@
   }
 
   .overlay .tip { font-size:12px; color:#8a90a5; }
+  /* 스토어 정책상 앱 안에도 개인정보처리방침 링크가 있어야 함 (구글플레이: 광고 ID 사용 앱).
+     웹뷰에서는 js/legal-link.js가 가로채 인앱 브라우저로 연다 */
+  .overlay .legal { font-size:12px; color:#8a90a5; text-decoration:underline; text-underline-offset:3px; }
+  /* 안드로이드 뒤로가기 2번 종료 안내 (js/capacitor-bridge.js가 .show 토글) */
+  #backToast {
+    position:fixed; left:50%; bottom:calc(var(--sab) + 76px); transform:translateX(-50%);
+    z-index:60; pointer-events:none; white-space:nowrap;
+    background:rgba(40,46,60,.88); color:#fff; font-size:13px; font-weight:600;
+    padding:9px 18px; border-radius:999px; opacity:0; transition:opacity .2s ease;
+  }
+  #backToast.show { opacity:1; }
   .chainBox { margin-top:2px; }
   .chainBox .cap { font-size:12px; font-weight:700; color:#8a90a5; margin-bottom:4px; }
   .chain { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:3px; max-width:min(360px, 94vw); }
@@ -263,6 +274,8 @@
         <button class="mode" data-mode="krw">▶️ 게임시작</button>
         <div class="chainBox"><div class="cap">돈 불리는 순서</div><div class="chain" id="chainKrw"></div></div>
         <p class="tip" id="comboTip"></p>
+        <a class="legal" id="linkPrivacy" href="https://tngus842655.github.io/MoneyGame/privacy.html"
+           target="_blank" rel="noopener">개인정보처리방침</a>
       </div>
     </div>
 
@@ -336,14 +349,18 @@
     </div><!-- /gameArea -->
 
     <div id="adBanner">AD · 배너 광고 영역 (320×50)</div>
+    <div id="backToast">한 번 더 누르면 종료됩니다</div>
   </div>
 
   <script src="lib/matter.min.js"></script>
   <script src="lib/supabase.min.js"></script>
   <script src="lib/apps-in-toss.min.js"></script>
+  <script src="lib/capacitor.js"></script>
   <script src="js/toss-safearea.js"></script>
   <script src="js/supabase-init.js"></script>
   <script src="js/toss-ads.js"></script>
+  <script src="js/capacitor-bridge.js"></script>
+  <script src="js/legal-link.js"></script>
   <script src="js/game.js"></script>
   <script src="js/ranking.js"></script>
 </body>
