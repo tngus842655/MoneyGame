@@ -1,5 +1,61 @@
 apply plugin: 'com.android.application'
 
+// ── 웹 자산 자동 동기화 ────────────────────────────────────────────────────
+// 게임 본체는 저장소 루트의 index.html/js/lib이고, 안드로이드 앱은 그것을
+// app/src/main/assets/public에 복사해서 웹뷰로 띄운다. 이 복사를 사람이 따로
+// 실행하게 두면(`npm run build:android`) 빼먹기 쉽고, 그러면 **앱 안에 예전 게임이
+// 그대로 들어간 채로 스토어에 올라간다.** 빌드가 알아서 하도록 preBuild에 물린다.
+//
+//   android/ 에서 gradlew.bat bundleRelease 하나로 끝나게 하는 것이 목적이다.
+def webRoot = rootProject.projectDir.parentFile      // 저장소 루트 (android/의 부모)
+def isWindows = System.getProperty('os.name').toLowerCase().contains('windows')
+
+// dist/ 만들기 — scripts/make-dist.mjs가 index.html·js·lib·public을 모은다
+tasks.register('makeWebDist', Exec) {
+    group = 'capacitor'
+    description = '게임 파일을 dist/로 모은다 (scripts/make-dist.mjs)'
+    workingDir = webRoot
+    commandLine 'node', 'scripts/make-dist.mjs'
+    // 입력이 그대로면 건너뛴다 — 매번 도는 것을 막아 빌드가 느려지지 않게 한다
+    inputs.files(fileTree(dir: webRoot, includes: ['index.html', 'js/**', 'lib/**', 'public/**']))
+    outputs.dir(new File(webRoot, 'dist'))
+}
+
+// dist/ → android/app/src/main/assets/public 복사 + 플러그인 목록 갱신.
+// npx 대신 CLI 진입점을 node로 직접 부른다 (npx는 셸·경로 해석이 환경마다 달라진다).
+tasks.register('capSync', Exec) {
+    group = 'capacitor'
+    description = 'dist/를 안드로이드 프로젝트로 동기화한다 (cap sync)'
+    dependsOn 'makeWebDist'
+    workingDir = webRoot
+    commandLine 'node', 'node_modules/@capacitor/cli/bin/capacitor', 'sync', 'android'
+}
+
+// Exec 태스크는 PATH에서 node를 찾는데, 윈도우에서는 node.exe다. 확장자 없이도
+// 대개 찾지만 확실히 하려고 실행 직전에 한 번 확인한다.
+[tasks.named('makeWebDist'), tasks.named('capSync')].each { t ->
+    t.configure {
+        doFirst {
+            if (isWindows) { environment 'PATHEXT', System.getenv('PATHEXT') ?: '.COM;.EXE;.BAT;.CMD' }
+        }
+    }
+}
+
+project.afterEvaluate {
+    tasks.named('preBuild').configure { dependsOn 'capSync' }
+}
+
+// ── 서명 ───────────────────────────────────────────────────────────────────
+// 서명 정보는 저장소에 두지 않는다. android/keystore.properties(gitignore됨)에 적고,
+// 형식은 android/keystore.properties.example 참고.
+// 없으면 디버그 빌드는 그대로 돌아가지만, **릴리스는 일부러 실패시킨다** — 미서명
+// .aab는 Play가 받지 않는데, 조용히 만들어지면 업로드 화면에서야 알게 된다.
+def keystorePropertiesFile = rootProject.file('keystore.properties')
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace = "com.moneygame.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,6 +63,9 @@ android {
         applicationId "com.moneygame.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
+        // 1 = 플레이스토어 첫 업로드. 올릴 때마다 versionCode를 1씩 올린다.
+        // versionCode는 한 번 쓴 번호를 재사용할 수 없고 Console에서도 고칠 수 없다.
+        // versionName은 스토어에 보이는 표시용이라 자유롭게 붙여도 된다.
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -16,10 +75,53 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (keystorePropertiesFile.exists()) {
+            release {
+                // rootProject.file: android/ 기준으로 푼다. 그냥 file()을 쓰면 android/app/
+                // 기준이 되어 android/에 있는 키스토어를 못 찾는다. 절대 경로도 그대로 통한다.
+                storeFile rootProject.file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
     buildTypes {
         release {
-            minifyEnabled false
+            if (keystorePropertiesFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+            // R8을 켜면 매핑 파일(mapping.txt)이 .aab 안에 같이 실려 가고 Play가 그걸로
+            // 크래시 로그의 난독화된 이름을 되돌린다. Console의 '가독화 파일이 없습니다'
+            // 경고도 이것 때문에 뜬다 — 따로 업로드할 필요는 없다.
+            //
+            // 캐패시터 플러그인은 리플렉션으로 찾아 쓰는데, 캐패시터가 자기 라이브러리에
+            // 넣어 배포하는 규칙(consumerProguardFiles)이 Plugin 상속 클래스를 통째로
+            // 지켜 주므로 우리 쪽에 따로 적을 것은 없다. AdMob(play-services-ads)도 같다.
+            minifyEnabled true
+            // shrinkResources는 켜지 않는다. 스플래시가 drawable을 이름으로 찾는데
+            // (SplashScreen.java의 getResources().getIdentifier) R8이 그걸 못 보고 지운다.
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+// 서명 키가 없는데 릴리스를 만들려고 하면 **빌드를 시작하기 전에** 세워 준다.
+// whenReady에서 던지는 이유: bundleRelease에 doFirst로 붙이면 R8까지 다 돌린 뒤
+// 마지막에 실패해서 몇 분을 버리게 된다.
+if (!keystorePropertiesFile.exists()) {
+    gradle.taskGraph.whenReady { graph ->
+        def wantsRelease = graph.allTasks.any { it.name in ['bundleRelease', 'assembleRelease'] }
+        if (wantsRelease) {
+            throw new GradleException(
+                "\n\n" +
+                "  서명 키가 없습니다. 미서명 .aab는 Play가 받지 않습니다.\n\n" +
+                "  처음 한 번만 (터미널 창에서 직접 실행, 비밀번호를 물어봅니다):\n" +
+                "    powershell -ExecutionPolicy Bypass -File ..\\scripts\\make-upload-key.ps1\n\n" +
+                "  키스토어와 android\\keystore.properties가 같이 만들어집니다.\n" +
+                "  그 뒤로는 gradlew.bat bundleRelease만 하면 됩니다.\n"
+            )
         }
     }
 }

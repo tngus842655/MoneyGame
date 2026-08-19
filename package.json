@@ -6,10 +6,14 @@
     "deploy:toss": "ait deploy",
     "android:add": "node scripts/make-dist.mjs && cap add android",
     "build:android": "node scripts/make-dist.mjs && cap sync android",
-    "open:android": "cap open android"
+    "build:aab": "cd android && gradlew.bat bundleRelease",
+    "open:android": "cap open android",
+    "make-key": "powershell -ExecutionPolicy Bypass -File scripts/make-upload-key.ps1",
+    "icons": "node tools/android-assets.mjs && node tools/store-assets.mjs"
   },
   "dependencies": {
     "@apps-in-toss/web-framework": "^3.0.3",
+    "@capacitor-community/admob": "^8.1.0",
     "@capacitor/android": "^8.5.0",
     "@capacitor/app": "^8.1.1",
     "@capacitor/browser": "^8.0.4",
@@ -17,6 +21,7 @@
   },
   "devDependencies": {
     "@apps-in-toss/devtools": "^3.0.3",
-    "@capacitor/cli": "^8.5.0"
+    "@capacitor/cli": "^8.5.0",
+    "sharp": "^0.35.3"
   }
 }
