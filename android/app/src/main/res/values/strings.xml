@@ -2,6 +2,6 @@
 <resources>
     <string name="app_name">머니 게임</string>
     <string name="title_activity_main">머니 게임</string>
-    <string name="package_name">io.github.tngus842655.moneygame</string>
-    <string name="custom_url_scheme">io.github.tngus842655.moneygame</string>
+    <string name="package_name">com.moneygame.app</string>
+    <string name="custom_url_scheme">com.moneygame.app</string>
 </resources>

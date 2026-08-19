@@ -164,7 +164,7 @@ npm run open:android   # 안드로이드 스튜디오 → Build > Generate Signe
   게임 코드를 고친 뒤에는 **반드시 `npm run build:android`로 다시 동기화**해야 앱에 반영됩니다
   (`android/app/src/main/assets/public`은 복사본이라 커밋하지 않습니다).
 - 필요한 도구: Android Studio, JDK 21. compileSdk/targetSdk는 36 (플레이스토어 요구치 충족).
-- 패키지명은 `capacitor.config.js`의 `appId` (`io.github.tngus842655.moneygame`).
+- 패키지명은 `capacitor.config.js`의 `appId` (`com.moneygame.app`).
   **플레이스토어에 한 번 올리면 영구히 바꿀 수 없으니** 첫 업로드 전에 확정하세요.
   바꾸려면 `appId`를 고친 뒤 `rm -rf android && npm run android:add`.
 - 화면은 세로 고정 (`AndroidManifest.xml`의 `screenOrientation="portrait"`).

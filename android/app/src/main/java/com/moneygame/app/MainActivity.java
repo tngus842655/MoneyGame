@@ -1,4 +1,4 @@
-package io.github.tngus842655.moneygame;
+package com.moneygame.app;
 
 import com.getcapacitor.BridgeActivity;
 
