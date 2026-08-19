@@ -1334,7 +1334,11 @@ document.getElementById('btnAdCancel').addEventListener('click', closeAd);
 function updateFeatUi() {
   for (const [kind, btn] of [['shake', btnShake], ['clean', btnClean]]) {
     const left = featUses[kind];
-    btn.dataset.count = left;
+    // 배지는 실제 요소의 텍스트로 그린다. data 속성 + CSS attr()로 그리던 때는
+    // 광고가 웹뷰를 덮은 사이 값이 바뀌면 돌아와도 옛 숫자가 남아 있었다 (index.html .cnt 참고)
+    const cnt = btn.querySelector('.cnt');
+    if (cnt) cnt.textContent = left;
+    btn.dataset.count = left;   // 디버깅·테스트용으로 남겨 둔다
     btn.classList.toggle('off', left <= 0);
     btn.disabled = left <= 0;
   }
