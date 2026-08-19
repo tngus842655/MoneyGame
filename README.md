@@ -149,6 +149,59 @@ npm run build:toss   # dist/ 준비 + money-game.ait 생성
 - CLI로 바로 올리려면 콘솔에서 API 키 발급 후 `npx ait token add`로 등록하고 `npm run deploy:toss`.
 - 번들은 압축 해제 기준 100MB 이하 제한. `dist/`와 `*.ait`는 커밋하지 않습니다(.gitignore).
 
+## 구글플레이 배포 (Capacitor 안드로이드)
+
+앱인토스와 **같은 `dist/`**를 안드로이드 앱으로 포장합니다. 웹 호스팅이 필요 없습니다 —
+게임 파일이 그대로 APK/AAB 안에 들어가고, 인터넷은 랭킹(Supabase)과 광고에만 씁니다.
+
+```bash
+npm install            # 최초 1회
+npm run build:android  # dist/ 준비 + 네이티브 프로젝트에 동기화
+npm run open:android   # 안드로이드 스튜디오 → Build > Generate Signed App Bundle (.aab)
+```
+
+- `android/`는 `npx cap add android`로 생성된 네이티브 프로젝트이며 커밋되어 있습니다.
+  게임 코드를 고친 뒤에는 **반드시 `npm run build:android`로 다시 동기화**해야 앱에 반영됩니다
+  (`android/app/src/main/assets/public`은 복사본이라 커밋하지 않습니다).
+- 필요한 도구: Android Studio, JDK 21. compileSdk/targetSdk는 36 (플레이스토어 요구치 충족).
+- 패키지명은 `capacitor.config.js`의 `appId` (`io.github.tngus842655.moneygame`).
+  **플레이스토어에 한 번 올리면 영구히 바꿀 수 없으니** 첫 업로드 전에 확정하세요.
+  바꾸려면 `appId`를 고친 뒤 `rm -rf android && npm run android:add`.
+- 화면은 세로 고정 (`AndroidManifest.xml`의 `screenOrientation="portrait"`).
+- 서명 키(`*.jks`)는 .gitignore에 있습니다. **잃어버리면 앱 업데이트가 영구히 불가능**하니 따로 백업하세요.
+
+### 하드웨어 뒤로가기
+
+`js/capacitor-bridge.js`가 안드로이드 뒤로가기 버튼을 받아, 위에 떠 있는 레이어부터
+차례로 닫습니다: 닉네임 편집 → 광고 확인 → 재확인 팝업 → 랭킹 → 게임오버(처음으로) →
+플레이 중(나가기 재확인) → 홈에서 두 번 누르면 종료. 광고 재생 중에는 무시합니다.
+리스너를 등록하지 않으면 뒤로가기 한 번에 앱이 꺼지므로 필수입니다.
+
+### 아직 남은 것 — 광고 수익화
+
+`js/toss-ads.js`는 **토스 앱 안에서만** 동작하므로, 플레이스토어 버전은 지금
+기존 3초 테스트 광고 화면으로 폴백됩니다 (기능·보상은 정상 동작, 광고 수익은 없음).
+수익화하려면 AdMob을 붙여야 합니다:
+
+1. `npm i @capacitor-community/admob` 후 `npm run build:android`
+2. `js/toss-ads.js`의 폴백 경로(`TossAdsBridge.rewardedAvailable()`가 false일 때)에 AdMob 배너/보상형 연결
+3. `AndroidManifest.xml`에 AdMob 앱 ID `<meta-data>`와 `com.google.android.gms.permission.AD_ID` 권한 추가
+4. Play Console 데이터 안전 섹션에 광고 ID 수집 신고 + `docs/privacy.html`의 광고 항목 확인
+
+## 개인정보처리방침 (docs/)
+
+구글플레이는 개인정보처리방침 **공개 URL이 필수**입니다. 게임을 웹에 올릴 필요는 없고,
+`docs/` 폴더의 정적 페이지만 GitHub Pages로 공개하면 됩니다.
+
+- 저장소 Settings → Pages → Source: `main` 브랜치, Folder: **`/docs`**
+- 공개 주소: `https://tngus842655.github.io/MoneyGame/privacy.html`
+- `/docs`로 지정하면 루트의 `index.html`(게임)은 올라가지 않고 정책 페이지만 공개됩니다.
+- 이 주소를 Play Console과 앱인토스 콘솔에 등록하고, 게임 홈 화면 하단 링크(`#linkPrivacy`)로도 열립니다.
+  주소를 바꾸면 `index.html`의 링크도 함께 고치세요.
+- 링크는 `js/legal-link.js`가 환경별로 처리합니다 — 토스는 `AppsInToss.openURL`,
+  안드로이드는 크롬 커스텀 탭, 일반 브라우저는 새 탭. 웹뷰가 정책 페이지로 덮여
+  게임으로 못 돌아오는 것을 막기 위함입니다.
+
 ## 배경음악
 
 `public/bgm/puzzle.mp3`가 플레이 중에만 작게(볼륨 0.08) 반복 재생됩니다.
@@ -164,12 +217,20 @@ iOS 웹뷰는 `<audio>`의 volume 속성을 무시하므로, 볼륨은 WebAudio 
 - `js/game.js` — 게임 로직 전체 (물리, 합치기, 렌더링, 입력, 사운드/배경음악)
 - `js/toss-safearea.js` — 전체화면(투명 내비게이션 바) safe area 브리지
 - `js/toss-ads.js` — 앱인토스 인앱 광고 브리지 (배너 + 보상형, 광고 그룹 ID 설정)
+- `js/capacitor-bridge.js` — 안드로이드 하드웨어 뒤로가기 처리 (Capacitor 전용)
+- `js/legal-link.js` — 개인정보처리방침 링크를 환경별 인앱 브라우저로 열기
 - `js/ranking.js` — 랭킹 화면 + Supabase 어댑터 (rpc 기반)
 - `js/supabase-init.js` — Supabase 클라이언트 초기화
 - `db/ranking_v2.sql` — 랭킹 저장 구조 v2 마이그레이션 (Supabase SQL Editor용)
+- `capacitor.config.js` — Capacitor(안드로이드 포장) 설정 (appId·appName·webDir)
+- `android/` — `cap add android`가 만든 네이티브 안드로이드 프로젝트
+- `docs/` — GitHub Pages로 공개하는 개인정보처리방침 페이지
 - `public/bgm/puzzle.mp3` — 배경음악
 - `lib/matter.min.js` — Matter.js 0.20.0 (물리 엔진, 로컬 번들)
 - `lib/apps-in-toss.min.js` — `@apps-in-toss/web-framework` 3.0.3 IIFE 번들 (전역 `AppsInToss`)
+- `lib/capacitor.js` — `@capacitor/core` IIFE 번들. 번들러가 없어 npm import를 못 쓰므로,
+  전역 `capacitorExports.registerPlugin('App'|'Browser')`으로 네이티브 플러그인을 호출한다
+  (`@capacitor/core` 버전을 올리면 `cp node_modules/@capacitor/core/dist/capacitor.js lib/`로 갱신)
 
 ## 조작
 

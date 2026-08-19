@@ -1,3 +1,8 @@
 node_modules/
 dist/
 *.ait
+
+# 안드로이드 서명 키 — 절대 커밋 금지 (유출되면 앱 업데이트 권한을 잃습니다)
+*.jks
+*.keystore
+android/keystore.properties
