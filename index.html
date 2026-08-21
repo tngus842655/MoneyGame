@@ -67,17 +67,23 @@
   }
 
   /* floating buttons */
-  /* 좌우 버튼 열은 같은 높이에서 시작 — 토스 네이티브 ⋯/X(우상단, ~52px) 살짝 아래 */
-  #hud, #hudR { position:absolute; top:64px; display:flex; flex-direction:column; gap:8px; line-height:normal; }
-  #hud  { left:10px; }
-  #hudR { right:10px; }
-  #hud button, #hudR button {
+  /* 인게임 버튼은 왼쪽 위 2×2(❮ ⏩ / 🌀 🧹) — 통을 낮추고 낙하 위치를 내려서
+     (game.js DROP_Y/LINE_Y) 아랫줄이 낙하 존과 거의 안 겹친다. 우상단은 토스
+     네이티브 ⋯/X 자리, 상단 가운데는 점수 텍스트 자리라 비워 둔다 */
+  #hud { position:absolute; top:12px; left:10px; display:grid; grid-template-columns:repeat(2, 38px); gap:8px; line-height:normal; }
+  /* 홈 화면 음소거 버튼 — 오른쪽 맨 위 가로 배치 (좌상단 🏆와 같은 높이) */
+  #menuSound { position:absolute; top:12px; right:12px; display:flex; gap:8px; line-height:normal; z-index:1; }
+  /* 토스 안에서는 같은 자리에 네이티브 ⋯/X가 떠 있어 가려지므로 그 아래로 내린다 */
+  body.in-toss #menuSound { top:64px; }
+  #hud button, #menuSound button {
     position:relative; width:38px; height:38px; border-radius:50%; border:2px solid rgba(255,255,255,.9);
     background:rgba(255,255,255,.55); font-size:18px; cursor:pointer; touch-action:manipulation;
     box-shadow:0 2px 6px rgba(50,80,120,.25);
   }
-  #hud button:active, #hudR button:active { transform:scale(.92); }
-  #hudR button.on { background:#ffd76e; border-color:#fff; box-shadow:0 2px 8px rgba(230,170,40,.55); }
+  #hud button:active, #menuSound button:active { transform:scale(.92); }
+  #hud button.on { background:#ffd76e; border-color:#fff; box-shadow:0 2px 8px rgba(230,170,40,.55); }
+  /* HUD 아이콘 (IconScout 3D, public/icons/) */
+  #hud button img { width:27px; height:27px; display:block; margin:auto; pointer-events:none; }
   /* 사운드 꺼짐 상태: 🔊/🎵 이모지는 그대로 두고 두 버튼 모두 같은 빨간 빗금으로 표시 */
   #btnSfx, #btnBgm { position:relative; }
   #btnSfx.mutedOff::after, #btnBgm.mutedOff::after {
@@ -85,7 +91,7 @@
     background:#e0483e; border-radius:2px; box-shadow:0 0 0 1.5px rgba(255,255,255,.85);
     transform:translate(-50%,-50%) rotate(45deg); pointer-events:none;
   }
-  #hudR button.ad::after {
+  #hud button.ad::after {
     content:'AD'; position:absolute; right:-5px; bottom:-4px;
     background:#ffcf3d; color:#7a5b00; font-size:9px; font-weight:800;
     padding:1px 4px; border-radius:6px; border:1px solid #fff; line-height:1.2;
@@ -94,15 +100,15 @@
      숫자가 바뀌어도 다시 그려지지 않는다 — 보상형 광고가 웹뷰를 덮고 있는 동안 값이
      바뀌기 때문에, 돌아와도 옛 숫자가 남아 있다가 버튼을 한 번 더 눌러(:active의
      transform으로 재래스터) 그제야 갱신됐다. 실제 요소의 텍스트로 바꿔 없앤다. */
-  #hudR button.ad .cnt {
+  #hud button.ad .cnt {
     position:absolute; left:-6px; top:-5px; pointer-events:none;
     min-width:17px; height:17px; box-sizing:border-box; padding:0 3px;
     background:#5fa8e8; color:#fff; font-size:10px; font-weight:800;
     border-radius:9px; border:1px solid #fff; line-height:15px; text-align:center;
   }
-  #hudR button.ad.off { background:#f0736f; cursor:default; }
-  #hudR button.ad.off .cnt { background:#c65550; }
-  #hudR button.ad.off:active { transform:none; }
+  #hud button.ad.off { background:#f0736f; cursor:default; }
+  #hud button.ad.off .cnt { background:#c65550; }
+  #hud button.ad.off:active { transform:none; }
 
   .overlay {
     position:absolute; inset:0; display:flex; overflow-y:auto; border-radius:12px; line-height:normal;
@@ -112,6 +118,7 @@
   #rank { z-index:20; }
   #adConfirm, #adPlay, #confirmDlg { z-index:30; }
   #nickEditor { z-index:40; }
+  #updateDlg { z-index:50; }   /* 업데이트 안내는 무엇보다 위 (앱 시작 시 표시) */
   .overlay .sheet {
     margin:auto; display:flex; flex-direction:column; align-items:center;
     gap:14px; text-align:center; padding:24px 16px; width:100%;
@@ -130,8 +137,8 @@
   .overlay button:active { transform:translateY(2px); box-shadow:0 2px 0 rgba(0,0,0,.15); }
   button[data-mode="krw"] { background:#5fa8e8; }
   button[data-mode="usd"] { background:#67b984; }
-  #btnAgain, #btnAdOk, #btnNickSave, #btnConfirmOk { background:#f78fb3; }
-  #btnMenu, #btnAdCancel, #btnNickCancel, #btnConfirmCancel { background:#9aa5c4; }
+  #btnAgain, #btnAdOk, #btnNickSave, #btnConfirmOk, #btnUpdateNow { background:#f78fb3; }
+  #btnMenu, #btnAdCancel, #btnNickCancel, #btnConfirmCancel, #btnUpdateLater { background:#9aa5c4; }
   #btnRevive { background:#67b984; position:relative; }
   /* 한 판 1회 제한 표시 — HUD 광고 버튼의 횟수 배지와 같은 시각 언어 */
   #btnRevive::after {
@@ -141,6 +148,8 @@
     box-shadow:0 1px 3px rgba(0,0,0,.18);
   }
 
+  /* 팝업 타이틀 앞 기능 아이콘 — HUD 버튼과 같은 스프라이트 */
+  .overlay h2 .ttlIcon { width:30px; height:30px; vertical-align:-5px; }
   .overlay .tip { font-size:12px; color:#8a90a5; }
   /* 스토어 정책상 앱 안에도 개인정보처리방침 링크가 있어야 함 (구글플레이: 광고 ID 사용 앱).
      웹뷰에서는 js/legal-link.js가 가로채 인앱 브라우저로 연다 */
@@ -166,6 +175,10 @@
 
   /* ad dialogs */
   #adConfirmText, #confirmText { white-space:pre-line; }
+  /* 광고 준비 전 비활성 상태 — 로드가 끝나면 game.js가 활성화 (beginAdPrepare) */
+  #btnAdOk:disabled { background:#bcc5d6; box-shadow:0 4px 0 rgba(0,0,0,.08); cursor:default; }
+  #btnAdOk:disabled:active { transform:none; box-shadow:0 4px 0 rgba(0,0,0,.08); }
+  #adConfirmStatus { color:#e0483e; }
   .overlay.dark { background:rgba(30,34,48,.9); }
   .overlay.dark p, .overlay.dark .sub { color:#c9d0e2; }
   #adBox {
@@ -198,6 +211,7 @@
     width:34px; height:34px; border-radius:50%; border:2px solid #fff; background:rgba(255,255,255,.6);
     font-size:16px; color:#8a90a5; cursor:pointer; touch-action:manipulation;
   }
+  #btnRankClose img { width:20px; height:20px; display:block; margin:auto; pointer-events:none; }
   #btnRankClose:active { transform:translateY(-50%) scale(.92); }
   /* 내 순위(왼쪽) · 닉네임(오른쪽) 한 줄 — 좁은 화면에서는 자연스럽게 줄바꿈 */
   #rankSub { display:flex; align-items:center; justify-content:space-between; gap:4px 10px; flex-wrap:wrap; margin-top:8px; }
@@ -265,21 +279,18 @@
     <canvas id="game"></canvas>
 
     <div id="hud" class="hidden">
-      <button id="btnSfx" title="효과음 켜기/끄기">🔊</button>
-      <button id="btnBgm" title="배경음악 켜기/끄기">🎵</button>
-      <button id="btnHome" title="처음으로">🏠</button>
-      <button id="btnRestart" title="다시하기">🔄</button>
-    </div>
-
-    <div id="hudR" class="hidden">
-      <button id="btnAuto" title="자동 드롭 — 켜고 꾹 누르고 있으면 계속 떨어져요">👇</button>
-      <button id="btnFill" title="자동 진행 (공간 4/5까지 동전 자동 투하)">⏩</button>
-      <button id="btnShake" class="ad" title="통 흔들기 (광고)">🌀<span class="cnt"></span></button>
-      <button id="btnClean" class="ad" title="동전 제거 (광고)">🧹<span class="cnt"></span></button>
+      <button id="btnHome" title="처음으로"><img src="public/icons/back.png" alt="뒤로"></button>
+      <button id="btnFill" title="자동 진행 (공간 4/5까지 동전 자동 투하)"><img src="public/icons/fill.png" alt="자동 진행"></button>
+      <button id="btnShake" class="ad" title="통 흔들기 (광고)"><img src="public/icons/shake.png" alt="통 흔들기"><span class="cnt"></span></button>
+      <button id="btnClean" class="ad" title="동전 제거 (광고)"><img src="public/icons/clean.png" alt="동전 제거"><span class="cnt"></span></button>
     </div>
 
     <div id="menu" class="overlay">
       <button id="btnRank" title="랭킹">🏆</button>
+      <div id="menuSound">
+        <button id="btnBgm" title="배경음악 켜기/끄기">🎵</button>
+        <button id="btnSfx" title="효과음 켜기/끄기">🔊</button>
+      </div>
       <div class="sheet">
         <h1>💰 머니 게임</h1>
         <p>같은 돈끼리 부딪히면 더 큰 돈이 돼요!<br>돈을 떨어뜨려서 제일 큰 돈을 만들어 보세요.</p>
@@ -306,8 +317,9 @@
 
     <div id="adConfirm" class="overlay hidden">
       <div class="sheet">
-        <h2>📺 광고 보기</h2>
+        <h2 id="adConfirmTitle">광고 보기</h2><!-- 열릴 때 기능명+아이콘으로 교체됨 (game.js) -->
         <p id="adConfirmText"></p>
+        <p class="sub hidden" id="adConfirmStatus">광고를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p>
         <button class="act" id="btnAdOk">광고 보고 사용하기</button>
         <button class="act" id="btnAdCancel">취소</button>
       </div>
@@ -315,7 +327,7 @@
 
     <div id="adPlay" class="overlay dark hidden">
       <div class="sheet">
-        <div id="adBox">📺 테스트 광고<span class="adSmall">TEST AD</span></div>
+        <div id="adBox">📺 광고<span class="adSmall">AD</span></div>
         <div id="adCount">3</div>
         <p class="sub" id="adPlayMsg">잠시 후 기능이 실행됩니다…</p>
       </div>
@@ -327,6 +339,16 @@
         <p id="confirmText"></p>
         <button class="act" id="btnConfirmOk">네</button>
         <button class="act" id="btnConfirmCancel">계속 할래요</button>
+      </div>
+    </div>
+
+    <!-- 구글플레이에 새 버전이 있으면 안드로이드 앱에서만 표시 (js/app-update.js) -->
+    <div id="updateDlg" class="overlay hidden">
+      <div class="sheet">
+        <h2>🔔 새 버전이 나왔어요!</h2>
+        <p>업데이트를 누르면 플레이 스토어가 열려요.</p>
+        <button class="act" id="btnUpdateNow">업데이트</button>
+        <button class="act" id="btnUpdateLater">나중에</button>
       </div>
     </div>
 
@@ -343,7 +365,7 @@
     <div id="rank" class="overlay hidden">
       <div id="rankPanel">
         <div id="rankHead">
-          <button id="btnRankClose" title="뒤로">❮</button>
+          <button id="btnRankClose" title="뒤로"><img src="public/icons/back.png" alt="뒤로"></button>
           <h2>랭킹</h2>
         </div>
         <div id="rankSub">
@@ -376,6 +398,7 @@
   <script src="js/toss-ads.js"></script>
   <script src="js/admob-ads.js"></script>
   <script src="js/capacitor-bridge.js"></script>
+  <script src="js/app-update.js"></script>
   <script src="js/legal-link.js"></script>
   <script src="js/game.js"></script>
   <script src="js/ranking.js"></script>

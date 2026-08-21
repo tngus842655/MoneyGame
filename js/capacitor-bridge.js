@@ -35,6 +35,7 @@ const tap = (id) => {
 // 각 화면의 취소/닫기 버튼을 그대로 눌러서, 판 정리·점수 저장은 game.js 로직에 맡긴다.
 function handleBack() {
   if (shown('adPlay'))     return;                           // 광고 재생 중엔 무시
+  if (shown('updateDlg'))  { tap('btnUpdateLater');   return; }   // 업데이트 안내 → 나중에
   if (shown('nickEditor')) { tap('btnNickCancel');    return; }
   if (shown('adConfirm'))  { tap('btnAdCancel');      return; }
   if (shown('confirmDlg')) { tap('btnConfirmCancel'); return; }

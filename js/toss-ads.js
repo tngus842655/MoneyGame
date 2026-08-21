@@ -8,10 +8,12 @@
 'use strict';
 
 // ─── 광고 그룹 ID ───
-// 지금은 앱인토스 공식 테스트 ID. 출시 전에 콘솔에서 발급받은 실제 ID로 교체하세요.
+// 앱인토스 콘솔에서 발급받은 운영(live) ID. 테스트가 필요하면 개발자 문서의
+// 공식 테스트 ID로 잠시 바꿔 쓸 것 — 단, 테스트 ID 문자열이 주석으로라도 번들에
+// 실려 있으면 앱인토스 자동 검수가 즉시 반려하므로 제출 전 반드시 되돌려야 한다.
 const AD_GROUP = {
-  banner: 'ait-ad-test-banner-id',      // 배너 광고 - 리스트형
-  rewarded: 'ait-ad-test-rewarded-id',  // 보상형 광고 (통 흔들기 / 동전 제거 / 부활 공용)
+  banner: 'ait.v2.live.ac5c31a0cad14bcb',      // 배너 광고 - 문구강조형
+  rewarded: 'ait.v2.live.49083bc0d0d64743',    // 보상형 광고 (통 흔들기 / 동전 제거 / 부활 공용)
 };
 const SHOW_WAIT_MS = 15000;   // 표시 요청 시 로드가 안 끝났으면 이만큼까지만 기다림
 const NO_DISMISS_MS = 10000;  // 일부 안드로이드 토스앱(5.255.0)은 dismissed가 오지 않아 보상 후 타임아웃으로 마무리
@@ -28,6 +30,16 @@ const bannerSupported = () => !!sdk && !!sdk.TossAds && supported(sdk.TossAds.in
 let rewardedReady = false;
 let rewardedLoading = false;
 let waitingShow = null;   // 로드가 끝나는 대로 표시해 달라는 예약 { cbs, timer }
+let prepareWaiters = [];  // 광고 팝업이 로드 완료를 기다림 { onReady, onFail } (game.js beginAdPrepare)
+
+function notifyPrepareWaiters(ok, error) {
+  if (!prepareWaiters.length) return;
+  const ws = prepareWaiters;
+  prepareWaiters = [];
+  for (const w of ws) {
+    try { ok ? w.onReady() : w.onFail(error); } catch (e) {}
+  }
+}
 
 function loadRewarded() {
   if (!rewardedSupported() || rewardedReady || rewardedLoading) return;
@@ -41,6 +53,7 @@ function loadRewarded() {
       clearTimeout(w.timer);
       w.cbs.onFail(error);
     }
+    notifyPrepareWaiters(false, error);
   };
   try {
     sdk.loadFullScreenAd({
@@ -55,12 +68,22 @@ function loadRewarded() {
           clearTimeout(w.timer);
           showLoaded(w.cbs);
         }
+        notifyPrepareWaiters(true);
       },
       onError: failLoad,
     });
   } catch (e) {
     failLoad(e);
   }
+}
+
+// 광고 팝업용 사전 로드: 이미 로드돼 있으면 즉시 onReady, 아니면 로드를 시작해
+// 끝나는 대로 알려 준다. onReady/onFail 중 정확히 하나만 호출됨.
+function prepareRewarded(cbs) {
+  if (!rewardedSupported()) { cbs.onFail(new Error('unsupported')); return; }
+  if (rewardedReady) { cbs.onReady(); return; }
+  prepareWaiters.push(cbs);
+  loadRewarded();
 }
 
 function showLoaded(cbs) {
@@ -212,6 +235,7 @@ if (!startBanner()) loadRewarded();
 if (rewardedSupported()) {
   window.AdsBridge = {
     rewardedAvailable: rewardedSupported,
+    prepareRewarded,
     showRewarded,
   };
 }

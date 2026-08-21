@@ -39,6 +39,16 @@ let rewardedReady = false;
 let rewardedLoading = false;
 let waitingShow = null;   // 로드가 끝나는 대로 표시해 달라는 예약 { cbs, timer }
 let current = null;       // 표시 중인 광고의 콜백 { cbs, earned, finished }
+let prepareWaiters = [];  // 광고 팝업이 로드 완료를 기다림 { onReady, onFail } (game.js beginAdPrepare)
+
+function notifyPrepareWaiters(ok, error) {
+  if (!prepareWaiters.length) return;
+  const ws = prepareWaiters;
+  prepareWaiters = [];
+  for (const w of ws) {
+    try { ok ? w.onReady() : w.onFail(error); } catch (e) {}
+  }
+}
 
 function loadRewarded() {
   if (rewardedReady || rewardedLoading) return;
@@ -50,7 +60,16 @@ function loadRewarded() {
       rewardedLoading = false;
       console.error('[admob] 보상형 광고 로드 실패:', error);
       failWaiting(error);
+      notifyPrepareWaiters(false, error);
     });
+}
+
+// 광고 팝업용 사전 로드: 이미 로드돼 있으면 즉시 onReady, 아니면 로드를 시작해
+// 끝나는 대로 알려 준다. onReady/onFail 중 정확히 하나만 호출됨 — toss-ads.js와 같은 규칙.
+function prepareRewarded(cbs) {
+  if (rewardedReady) { cbs.onReady(); return; }
+  prepareWaiters.push(cbs);
+  loadRewarded();
 }
 
 function failWaiting(error) {
@@ -84,6 +103,7 @@ function failCurrent(error) {
 AdMob.addListener('onRewardedVideoAdLoaded', () => {
   rewardedLoading = false;
   rewardedReady = true;
+  notifyPrepareWaiters(true);
   if (!waitingShow) return;
   const w = waitingShow;
   waitingShow = null;
@@ -96,6 +116,7 @@ AdMob.addListener('onRewardedVideoAdFailedToLoad', (error) => {
   rewardedReady = false;
   console.error('[admob] 보상형 광고 로드 실패:', error);
   failWaiting(error || new Error('failedToLoad'));
+  notifyPrepareWaiters(false, error || new Error('failedToLoad'));
 });
 
 AdMob.addListener('onRewardedVideoAdShowed', () => {
@@ -178,6 +199,7 @@ AdMob.initialize({ initializeForTesting: cfg.testing })
 
 window.AdsBridge = {
   rewardedAvailable: () => true,
+  prepareRewarded,
   showRewarded,
 };
 })();

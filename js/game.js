@@ -8,8 +8,8 @@ const W = 420, H = 740;
 const TAU = Math.PI * 2;
 const WALL_X = 10;            // inner edge of side walls
 const FLOOR_TOP = H - 16;     // top edge of the floor
-const DROP_Y = 104;           // y where held piece hovers
-const LINE_Y = 165;           // game-over line
+const DROP_Y = 135;           // y where held piece hovers — 통에 바짝 붙여 상단 공간 확보
+const LINE_Y = 190;           // game-over line — 통을 살짝 낮춰 위에 점수 띠 자리를 만듦
 const OVER_MS = 2000;         // 위험 상태가 이 시간 연속 유지되면 게임오버
 const COMBO_MS = 5000;        // 이 시간 안에 연달아 합치면 콤보 유지
 const SPAWN_TIERS = 4;        // droppable tiers (coins only)
@@ -27,14 +27,16 @@ const MODES = {
     key:'krw', name:'원화', symbol:'₩',
     format: v => v.toLocaleString('ko-KR') + '원',
     tiers: [
-      { kind:'coin', r:24, value:10,    label:'10',  sub:'원', metal:'copper' },
-      { kind:'coin', r:30, value:50,    label:'50',  sub:'원', metal:'silver' },
-      { kind:'coin', r:37, value:100,   label:'100', sub:'원', metal:'silver' },
-      { kind:'coin', r:45, value:500,   label:'500', sub:'원', metal:'gold'   },
-      { kind:'bill', w:124, h:58, value:1000,  corner:'1000',  name:'천원',   base:'#b7d3ee', edge:'#6e97c4', ink:'#3c6a9e', face:0 },
-      { kind:'bill', w:148, h:70, value:5000,  corner:'5000',  name:'오천원', base:'#f6cfae', edge:'#d89a6a', ink:'#a5622e', face:1 },
-      { kind:'bill', w:176, h:83, value:10000, corner:'10000', name:'만원',   base:'#bce3c3', edge:'#6fae7f', ink:'#3f7d51', face:2 },
-      { kind:'bill', w:205, h:97, value:50000, corner:'50000', name:'오만원', base:'#f7dfa0', edge:'#d9b24a', ink:'#96731f', face:3 },
+      { kind:'coin', r:24, value:10,    label:'10',  metal:'copper' },
+      { kind:'coin', r:30, value:50,    label:'50',  metal:'silver' },
+      { kind:'coin', r:37, value:100,   label:'100', metal:'silver' },
+      { kind:'coin', r:45, value:500,   label:'500', metal:'gold'   },
+      // 지폐 크기는 IconScout 스프라이트(public/money/bill-*.png, 비율 1.62)에 맞춤 —
+      // 면적은 예전(2.1 비율) 크기와 거의 같게 유지해 게임 밸런스는 그대로다.
+      { kind:'bill', w:108, h:67,  value:1000,  corner:'1000',  name:'천원',   sprite:'1000',  base:'#b7d3ee', edge:'#6e97c4', ink:'#3c6a9e', face:0 },
+      { kind:'bill', w:130, h:80,  value:5000,  corner:'5000',  name:'오천원', sprite:'5000',  base:'#f6cfae', edge:'#d89a6a', ink:'#a5622e', face:1 },
+      { kind:'bill', w:154, h:95,  value:10000, corner:'10000', name:'만원',   sprite:'10000', base:'#bce3c3', edge:'#6fae7f', ink:'#3f7d51', face:2 },
+      { kind:'bill', w:180, h:111, value:50000, corner:'50000', name:'오만원', sprite:'50000', base:'#f7dfa0', edge:'#d9b24a', ink:'#96731f', face:3 },
     ],
   },
   usd: {
@@ -43,10 +45,10 @@ const MODES = {
       ? v + '¢'
       : '$' + (v / 100).toLocaleString('en-US', { minimumFractionDigits: v % 100 ? 2 : 0, maximumFractionDigits: 2 }),
     tiers: [
-      { kind:'coin', r:24, value:1,     label:'1',   sub:'¢', metal:'copper' },
-      { kind:'coin', r:30, value:5,     label:'5',   sub:'¢', metal:'silver' },
-      { kind:'coin', r:37, value:10,    label:'10',  sub:'¢', metal:'silver' },
-      { kind:'coin', r:45, value:25,    label:'25',  sub:'¢', metal:'gold'   },
+      { kind:'coin', r:24, value:1,     label:'1',   metal:'copper' },
+      { kind:'coin', r:30, value:5,     label:'5',   metal:'silver' },
+      { kind:'coin', r:37, value:10,    label:'10',  metal:'silver' },
+      { kind:'coin', r:45, value:25,    label:'25',  metal:'gold'   },
       { kind:'bill', w:124, h:58, value:100,   corner:'1',   name:'ONE',     base:'#c9dcc1', edge:'#87a983', ink:'#4e7a4a', face:0 },
       { kind:'bill', w:148, h:70, value:500,   corner:'5',   name:'FIVE',    base:'#d6d1ea', edge:'#9a92c4', ink:'#655a9e', face:1 },
       { kind:'bill', w:176, h:83, value:1000,  corner:'10',  name:'TEN',     base:'#f3d5b2', edge:'#cf9f6b', ink:'#a4713a', face:2 },
@@ -54,6 +56,16 @@ const MODES = {
     ],
   },
 };
+
+// ---------------------------------------------------------------- sprites
+// 지폐 실사 스프라이트 (IconScout · Juty Jang 원화 지폐 시리즈, tools/money-assets.mjs로 가공).
+// 로드가 끝나기 전이나 파일이 없으면 drawBill의 기존 벡터 그리기로 폴백한다.
+const BILL_IMGS = {};
+for (const v of ['1000', '5000', '10000', '50000']) {
+  const im = new Image();
+  im.src = 'public/money/bill-' + v + '.png';
+  BILL_IMGS[v] = im;
+}
 
 // ---------------------------------------------------------------- helpers
 function hexA(hex, a) {
@@ -93,7 +105,10 @@ function ensureAudio() {
     try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
   }
   // Safari can land in a non-standard 'interrupted' state after calls/screen lock
-  if (audioCtx && audioCtx.state !== 'running') audioCtx.resume();
+  if (audioCtx && audioCtx.state !== 'running') {
+    const p = audioCtx.resume();
+    if (p && p.catch) p.catch(() => {});   // 제스처 밖 호출은 거부될 수 있음 — 다음 터치가 다시 깨움
+  }
 }
 function blip(freq, dur = 0.1, type = 'triangle', vol = 0.12, slide = 1, delay = 0) {
   if (sfxMuted || !audioCtx || audioCtx.state !== 'running') return;
@@ -115,7 +130,9 @@ const sfx = {
   record: () => { [523, 659, 784, 1047, 1319].forEach((f, i) => blip(f, 0.14, 'triangle', 0.12, 1.05, i * 0.07)); },
 };
 
-// 배경음악: 플레이 중에만 작게 깔림 (메뉴/게임오버/광고/백그라운드에서는 일시정지)
+// 배경음악: 홈 화면과 플레이 중에 작게 깔림 (게임오버/광고/백그라운드에서는 일시정지).
+// 음소거 버튼이 홈 화면에 있으므로 홈에서도 틀어야 토글이 귀로 바로 확인된다 —
+// "플레이 중에만"이던 시절 버튼을 홈으로 옮기면서 해제가 안 먹히는 듯 보였던 원인.
 const BGM_VOL = 0.08;   // 효과음이 묻히지 않는 배경음악 볼륨
 const bgm = new Audio('public/bgm/puzzle.mp3');
 bgm.loop = true;
@@ -126,6 +143,11 @@ bgm.volume = BGM_VOL;
 let bgmGain = null;
 function ensureBgmChain() {
   if (bgmGain || !audioCtx) return;
+  // file://에서는 <audio>가 cross-origin 취급이라 WebAudio 체인을 거치면 스펙상
+  // "무음"이 출력된다 (에러도 없음 — 재생 중인데 소리만 안 나는 상태).
+  // 로컬 파일로 열어 테스트할 때는 체인 없이 volume(0.08) 폴백으로 재생한다.
+  // 토스(https)·구글플레이(WebView https)·localhost는 같은 출처라 체인 정상.
+  if (location.protocol === 'file:') return;
   try {
     const src = audioCtx.createMediaElementSource(bgm);   // 엘리먼트당 1회만 가능
     bgmGain = audioCtx.createGain();
@@ -166,7 +188,7 @@ let comboExpires = 0;
 let raining = false;         // 잭팟 후 보너스 레인 (입력 잠금)
 let rainPlan = [];
 let rainEndsAt = 0;
-let autoDrop = false;        // ⚡ 토글: 길게 누르면 자동 드롭
+let autoDrop = true;         // ⚡ 자동 드롭 상시 켜짐: 꾹 누르고 있으면 계속 떨어짐
 let aimStartAt = 0;
 let autoDroppedThisHold = false;
 let shakeUntil = 0;          // 🌀 통 흔들기 종료 시각 (흔드는 동안 게임오버 없음)
@@ -406,7 +428,7 @@ function startFill() {
   fillNextAt = 0;
   aiming = false;
   activePointerId = null;
-  floatTexts.push({ x: W / 2, y: 320, text: '⏩ 자동 진행!', t: 0, life: 1300, size: 24, color: '#8a6fd6' });
+  floatTexts.push({ x: W / 2, y: 320, text: '자동 진행!', t: 0, life: 1300, size: 24, color: '#8a6fd6' });
   blip(400, 0.12, 'triangle', 0.12, 1.4);
 }
 
@@ -515,38 +537,30 @@ function doRevive() {
   sfx.jackpot();
 }
 
-// ---------------------------------------------------------------- ⚠️ 재확인 팝업 (다시하기/홈)
-// 플레이 중 HUD의 🔄/🏠 를 실수로 눌러 판이 날아가지 않도록 한 번 더 확인.
+// ---------------------------------------------------------------- ⚠️ 재확인 팝업 (홈)
+// 플레이 중 HUD의 ❮(처음으로)를 실수로 눌러 판이 날아가지 않도록 한 번 더 확인.
 // 팝업이 열린 동안은 광고 팝업처럼 물리·입력이 정지된다 (step에서 confirmOpen 체크).
 let confirmOpen = false;
-let pendingConfirmAction = null;   // 'restart' | 'home'
 
-function requestConfirm(kind) {
-  if (state !== 'playing') { doConfirmAction(kind); return; }   // 진행 중인 판이 없으면 바로 실행
+function requestConfirm() {
+  if (state !== 'playing') { doConfirmAction(); return; }   // 진행 중인 판이 없으면 바로 실행
   if (adOpen || confirmOpen) return;
-  pendingConfirmAction = kind;
   confirmOpen = true;
   aiming = false;
   activePointerId = null;
-  const texts = {
-    restart: { title: '🔄 다시하기', text: '지금 판을 처음부터 다시 시작할까요?\n지금까지 모은 점수는 랭킹에 저장돼요.' },
-    home:    { title: '🏠 처음으로', text: '게임을 그만두고 첫 화면으로 나갈까요?\n지금까지 모은 점수는 랭킹에 저장돼요.' },
-  };
-  document.getElementById('confirmTitle').textContent = texts[kind].title;
-  document.getElementById('confirmText').textContent = texts[kind].text;
+  document.getElementById('confirmTitle').textContent = '🏠 처음으로';
+  document.getElementById('confirmText').textContent = '게임을 그만두고 첫 화면으로 나갈까요?\n지금까지 모은 점수는 랭킹에 저장돼요.';
   document.getElementById('confirmDlg').classList.remove('hidden');
 }
 
 function closeConfirm() {
   confirmOpen = false;
-  pendingConfirmAction = null;
   document.getElementById('confirmDlg').classList.add('hidden');
 }
 
-function doConfirmAction(kind) {
+function doConfirmAction() {
   finalizeAbandon(false);
-  if (kind === 'restart') { if (mode) startGame(mode.key); }
-  else goMenu();
+  goMenu();
 }
 
 // ---------------------------------------------------------------- 📺 광고 게이트
@@ -569,25 +583,82 @@ function requestAdFeature(kind) {
     return;
   }
   const coinLabel = mode.key === 'krw' ? '500원 이하 동전' : '25¢ 이하 동전';
+  // 팝업 타이틀은 기능명으로 — "광고 보기" 같은 일반 문구보다 무엇을 얻는지가 먼저 보이게.
+  // 아이콘은 HUD 버튼과 같은 스프라이트(public/icons/)를 써서 어떤 기능인지 이어지게 한다.
   const texts = {
-    shake: '광고를 보면 통을 좌우로 5초간 흔들어서\n돈을 골고루 섞을 수 있어요!',
-    clean: `광고를 보면 ${coinLabel}을 모두 제거해서\n공간을 확보할 수 있어요!`,
+    shake: { title: '통 흔들기', desc: '광고를 보면 통을 좌우로 5초간 흔들어서\n돈을 골고루 섞을 수 있어요!' },
+    clean: { title: '동전 제거', desc: `광고를 보면 ${coinLabel}을 모두 제거해서\n공간을 확보할 수 있어요!` },
   };
-  document.getElementById('adConfirmText').textContent = texts[kind];
+  const titleEl = document.getElementById('adConfirmTitle');
+  titleEl.textContent = '';
+  const icon = document.createElement('img');
+  icon.src = `public/icons/${kind}.png`;
+  icon.alt = '';
+  icon.className = 'ttlIcon';
+  titleEl.append(icon, ` ${texts[kind].title}`);
+  document.getElementById('adConfirmText').textContent = texts[kind].desc;
   document.getElementById('adConfirm').classList.remove('hidden');
+  beginAdPrepare();   // 팝업을 여는 순간 광고 로드 시작 — 준비되면 버튼 활성화
 }
 
 function closeAd() {
   adOpen = false;
   pendingAdAction = null;
   if (adCountdown) { clearInterval(adCountdown); adCountdown = null; }
+  adPrepareSeq++;                    // 닫힌 팝업의 늦은 로드 콜백 무시 (beginAdPrepare)
+  clearTimeout(adPrepareTimer);
   document.getElementById('adConfirm').classList.add('hidden');
   document.getElementById('adPlay').classList.add('hidden');
   // 실광고 로딩 표시에서 바꾼 요소 원복
   document.getElementById('adBox').classList.remove('hidden');
   document.getElementById('adCount').classList.remove('hidden');
   document.getElementById('adPlayMsg').textContent = '잠시 후 기능이 실행됩니다…';
-  if (state === 'playing') playBgm();
+  if (state === 'playing' || state === 'menu') playBgm();
+}
+
+// ─── 광고 사전 로드 게이트 ───
+// 팝업이 열리는 순간 광고 로드를 시작하고, 준비가 끝나야 "광고 보고 사용하기"
+// 버튼이 활성화된다 (이전에는 버튼을 누른 뒤에야 로드를 시작해 첫 표시가 느렸다).
+// 실광고 브리지가 없는 일반 브라우저(시뮬레이션 광고)에서는 즉시 활성화된다.
+const btnAdOk = document.getElementById('btnAdOk');
+const AD_PREPARE_TIMEOUT_MS = 12000;   // 이 시간 안에 로드가 안 끝나면 다시 불러오기로 전환
+let adOkState = 'ready';               // 'loading' | 'ready' | 'retry'
+let adPrepareSeq = 0;                  // 팝업이 닫히면 +1 — 늦게 도착한 콜백 구분용
+let adPrepareTimer = 0;
+
+function setAdOkState(s) {
+  adOkState = s;
+  btnAdOk.disabled = s === 'loading';
+  btnAdOk.textContent =
+    s === 'loading' ? '광고 불러오는 중…' :
+    s === 'retry' ? '광고 다시 불러오기' : '광고 보고 사용하기';
+  document.getElementById('adConfirmStatus').classList.toggle('hidden', s !== 'retry');
+}
+
+function beginAdPrepare() {
+  const seq = ++adPrepareSeq;
+  clearTimeout(adPrepareTimer);
+  const bridge = window.AdsBridge;
+  if (!bridge || !bridge.rewardedAvailable() || !bridge.prepareRewarded) {
+    setAdOkState('ready');             // 시뮬레이션 광고는 로드가 필요 없음
+    return;
+  }
+  setAdOkState('loading');
+  adPrepareTimer = setTimeout(() => {
+    if (seq === adPrepareSeq) setAdOkState('retry');
+  }, AD_PREPARE_TIMEOUT_MS);
+  bridge.prepareRewarded({
+    onReady: () => {
+      if (seq !== adPrepareSeq) return;
+      clearTimeout(adPrepareTimer);
+      setAdOkState('ready');
+    },
+    onFail: () => {
+      if (seq !== adPrepareSeq) return;
+      clearTimeout(adPrepareTimer);
+      setAdOkState('retry');
+    },
+  });
 }
 
 // 토스 앱·구글플레이 앱 안이면 실제 보상형 광고, 밖(일반 브라우저)이면 시뮬레이션 광고.
@@ -606,7 +677,7 @@ function playRewardedAd(bridge) {
   const adPlayEl = document.getElementById('adPlay');
   document.getElementById('adBox').classList.add('hidden');
   document.getElementById('adCount').classList.add('hidden');
-  document.getElementById('adPlayMsg').textContent = '📺 광고 불러오는 중…';
+  document.getElementById('adPlayMsg').textContent = '📺 광고 여는 중…';   // 로드는 팝업에서 이미 끝남
   adPlayEl.classList.remove('hidden');
   let charged = false;   // onEarned에서 횟수를 이미 차감했는지 (onFinish 중복 차감 방지)
   bridge.showRewarded({
@@ -704,16 +775,13 @@ function startGame(modeKey) {
   if (!engine) initEngine();
   resetBoard();
   syncPageBg('play');
-  // 지난 판/지난 세션에서 자동 드롭을 켜둔 채 시작하면 사용법을 한 번 상기
-  if (autoDrop) {
-    floatTexts.push({ x: W / 2, y: 300, text: '자동 드롭 ON — 꾹 누르고 있으면 계속 떨어져요', t: 0, life: 2000, size: 15, color: '#e8961e' });
-  }
+  // 자동 드롭은 상시 켜짐 — 조작법을 판마다 한 번 상기
+  floatTexts.push({ x: W / 2, y: 300, text: '꾹 누르고 있으면 자동으로 계속 떨어져요', t: 0, life: 2000, size: 15, color: '#e8961e' });
   state = 'playing';
   playBgm();
   document.getElementById('menu').classList.add('hidden');
   document.getElementById('over').classList.add('hidden');
   document.getElementById('hud').classList.remove('hidden');
-  document.getElementById('hudR').classList.remove('hidden');
 }
 
 function resetBoard() {
@@ -839,13 +907,12 @@ function checkpointAbandon() {
 function goMenu() {
   state = 'menu';
   syncPageBg('overlay');
-  pauseBgm();
+  playBgm();   // 홈 화면에도 배경음악 — 음소거 토글이 홈에 있어서 여기서도 들려야 한다
   if (engine) for (const b of moneyBodies()) Composite.remove(engine.world, b);
   closeAd();
   closeConfirm();
   document.getElementById('over').classList.add('hidden');
   document.getElementById('hud').classList.add('hidden');
-  document.getElementById('hudR').classList.add('hidden');
   document.getElementById('menu').classList.remove('hidden');
 }
 
@@ -877,13 +944,11 @@ function drawCoin(c, def, forcePlain) {
   c.fillStyle = 'rgba(255,255,255,0.3)'; c.fill();
   c.lineWidth = 1.2; c.strokeStyle = hexA(pal.dark, 0.45); c.stroke();
 
-  // label
+  // label — 숫자만 크게 ('원'/'¢' 부호는 빼서 시인성 확보)
   c.fillStyle = pal.text;
   c.textAlign = 'center'; c.textBaseline = 'middle';
-  c.font = `800 ${r * (def.label.length <= 2 ? 0.6 : 0.48)}px ${FONT}`;
-  c.fillText(def.label, 0, -r * 0.08);
-  c.font = `700 ${r * 0.3}px ${FONT}`;
-  c.fillText(def.sub, 0, r * 0.4);
+  c.font = `800 ${r * (def.label.length <= 2 ? 0.7 : 0.54)}px ${FONT}`;
+  c.fillText(def.label, 0, 0);
 
   // shine
   if (!forcePlain) {
@@ -930,6 +995,14 @@ function drawFace(c, style, ink, w, h, symbol) {
 }
 
 function drawBill(c, def, symbol) {
+  // 실사 스프라이트가 준비돼 있으면 그걸 그린다 (tools/money-assets.mjs에서
+  // 수평화·크롭해 bbox를 꽉 채움). 6% 키워 그려서 물리 모서리까지 확실히 덮는다.
+  const im = def.sprite && BILL_IMGS[def.sprite];
+  if (im && im.complete && im.naturalWidth) {
+    const bw = def.w * 1.06, bh = def.h * 1.06;
+    c.drawImage(im, -bw / 2, -bh / 2, bw, bh);
+    return;
+  }
   const w = def.w, h = def.h;
   const rr = Math.min(12, h * 0.16);
 
@@ -1061,33 +1134,35 @@ function drawHeld(now) {
 function drawHud() {
   if (state === 'menu') return;
 
-  // score pill — 금액만 표시. 최고 기록 갱신 중이면 (최고) 접두 + 금색 강조
+  // score — 분홍 카드 없이 금액 텍스트만, 맨 위 가운데(버튼 첫 줄과 같은 높이).
+  // 좌우는 왼쪽 2×2 버튼·오른쪽 토스 네이티브 ⋯/X와 충분히 떨어져 있고,
+  // 세로는 대기 중인 돈(DROP_Y 위쪽 끝 y=90)보다 한참 위라 겹치지 않는다.
+  // 최고 기록 갱신 중이면 금색 + 글로우로 강조 (카드가 없어진 대신 색이 담당).
   const hudNow = performance.now();
-  const pw = 216, ph = 44, px = W / 2 - pw / 2, py = 10;
+  const scoreLabel = mode.format(score);
+  const SCORE_Y = 32;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `800 22px ${FONT}`;
+  ctx.lineWidth = 5; ctx.lineJoin = 'round';
+  ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+  ctx.strokeText(scoreLabel, W / 2, SCORE_Y);
   if (newRecord) {
     const glow = 0.5 + 0.5 * Math.sin(hudNow / 180);
     ctx.save();
-    ctx.shadowColor = `rgba(255,170,40,${0.35 + 0.45 * glow})`;
-    ctx.shadowBlur = 12 + 10 * glow;
-    roundRect(ctx, px, py, pw, ph, 22);
-    ctx.fillStyle = 'rgba(255,178,64,0.97)'; ctx.fill();
+    ctx.shadowColor = `rgba(255,170,40,${0.4 + 0.4 * glow})`;
+    ctx.shadowBlur = 10 + 8 * glow;
+    ctx.fillStyle = '#f0a028';
+    ctx.fillText(scoreLabel, W / 2, SCORE_Y);
     ctx.restore();
-    roundRect(ctx, px, py, pw, ph, 22);
-    ctx.lineWidth = 3; ctx.strokeStyle = `rgba(255,235,170,${0.6 + 0.4 * glow})`; ctx.stroke();
   } else {
-    roundRect(ctx, px, py, pw, ph, 22);
-    ctx.fillStyle = 'rgba(247,143,179,0.95)'; ctx.fill();
-    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke();
+    ctx.fillStyle = '#e0608a';
+    ctx.fillText(scoreLabel, W / 2, SCORE_Y);
   }
-  ctx.fillStyle = '#fff';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = `800 21px ${FONT}`;
-  ctx.fillText((newRecord ? '(최고) ' : '') + mode.format(score), W / 2, py + ph / 2 + 1);
 
   if (combo >= 2 && hudNow < comboExpires) {
     ctx.fillStyle = '#ff8c42';
     ctx.font = `800 15px ${FONT}`;
-    ctx.fillText(`🔥 ${combo} 콤보!`, W / 2, py + ph + 16);
+    ctx.fillText(`🔥 ${combo} 콤보!`, W / 2, SCORE_Y + 26);
   }
   if (raining) {
     ctx.fillStyle = `rgba(224,96,138,${0.7 + 0.3 * Math.sin(hudNow / 120)})`;
@@ -1097,7 +1172,7 @@ function drawHud() {
   if (filling) {
     ctx.fillStyle = `rgba(138,111,214,${0.7 + 0.3 * Math.sin(hudNow / 120)})`;
     ctx.font = `800 22px ${FONT}`;
-    ctx.fillText('⏩ 자동 진행 중', W / 2, 132);
+    ctx.fillText('자동 진행 중', W / 2, 132);
   }
   if (hudNow < shakeUntil) {
     ctx.fillStyle = `rgba(95,168,232,${0.7 + 0.3 * Math.sin(hudNow / 120)})`;
@@ -1256,9 +1331,9 @@ window.addEventListener('pointercancel', e => {
 window.addEventListener('blur', () => { aiming = false; activePointerId = null; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) { pauseBgm(); return; }   // 백그라운드에서는 배경음악도 멈춤
+  if (document.hidden) { pauseBgm(); return; }   // 백그라운드에서는 배경음악도 멈춤 (홈·플레이 공통)
   ensureAudio();
-  if (state === 'playing' && !adOpen) playBgm();
+  if ((state === 'playing' || state === 'menu') && !adOpen) playBgm();
 });
 
 // ---------------------------------------------------------------- buttons & menu
@@ -1267,12 +1342,10 @@ document.querySelectorAll('#menu button.mode').forEach(btn => {
 });
 document.getElementById('btnAgain').addEventListener('click', () => startGame(mode.key));
 document.getElementById('btnMenu').addEventListener('click', goMenu);
-document.getElementById('btnHome').addEventListener('click', () => requestConfirm('home'));
-document.getElementById('btnRestart').addEventListener('click', () => requestConfirm('restart'));
+document.getElementById('btnHome').addEventListener('click', requestConfirm);
 document.getElementById('btnConfirmOk').addEventListener('click', () => {
-  const a = pendingConfirmAction;
   closeConfirm();
-  if (a) doConfirmAction(a);
+  doConfirmAction();
 });
 document.getElementById('btnConfirmCancel').addEventListener('click', closeConfirm);
 
@@ -1294,7 +1367,12 @@ btnSfx.addEventListener('click', () => {
   sfxMuted = !sfxMuted;
   try { localStorage.setItem('money-merge-mute-sfx', sfxMuted ? '1' : '0'); } catch (e) {}
   renderSoundBtns();
-  if (!sfxMuted) blip(660, 0.08, 'triangle', 0.1);   // 켜짐 확인음
+  if (!sfxMuted) {
+    // 켜짐 확인음 — 방금 만든/깨운 AudioContext는 resume이 끝나기 전이라
+    // 바로 내면 무음으로 삼켜진다. 준비 전이면 잠깐 뒤에 낸다.
+    if (audioCtx && audioCtx.state === 'running') blip(660, 0.08, 'triangle', 0.1);
+    else setTimeout(() => blip(660, 0.08, 'triangle', 0.1), 150);
+  }
 });
 btnBgm.addEventListener('click', () => {
   ensureAudio();
@@ -1302,20 +1380,18 @@ btnBgm.addEventListener('click', () => {
   try { localStorage.setItem('money-merge-mute-bgm', bgmMuted ? '1' : '0'); } catch (e) {}
   renderSoundBtns();
   if (bgmMuted) pauseBgm();
-  else if (state === 'playing' && !adOpen) playBgm();
+  else if (!adOpen && !document.hidden) playBgm();   // 홈에서도 즉시 재생 (버튼이 홈에 있다)
 });
 renderSoundBtns();
-const btnAuto = document.getElementById('btnAuto');
-try { autoDrop = localStorage.getItem('money-merge-auto') === '1'; } catch (e) {}
-btnAuto.classList.toggle('on', autoDrop);
-btnAuto.addEventListener('click', () => {
-  autoDrop = !autoDrop;
-  btnAuto.classList.toggle('on', autoDrop);
-  try { localStorage.setItem('money-merge-auto', autoDrop ? '1' : '0'); } catch (e) {}
-  // 아이콘만으로는 "꾹 누르면 자동"이 전달되지 않아, 토글할 때마다 사용법을 화면에 안내
-  floatTexts.push(autoDrop
-    ? { x: W / 2, y: 300, text: '자동 드롭 ON — 꾹 누르고 있으면 계속 떨어져요!', t: 0, life: 2000, size: 16, color: '#e8961e' }
-    : { x: W / 2, y: 300, text: '자동 드롭 OFF', t: 0, life: 1100, size: 15, color: '#8a90a5' });
+
+// 홈 배경음악 시작 + 광고·백그라운드 복귀 뒤 오디오 회복.
+// 네이티브 전면 광고가 닫히면 AudioContext가 suspended로 남아 배경음악이
+// "재생 중인데 무음"이 될 수 있다. resume()은 사용자 제스처 안에서만 확실히
+// 성공하므로, 아무 터치에서나 컨텍스트를 깨우고 배경음악을 다시 붙인다.
+playBgm();   // 자동재생이 허용된 환경이면 홈 진입 즉시 시작
+document.addEventListener('pointerdown', () => {
+  ensureAudio();
+  if ((state === 'menu' || state === 'playing') && !adOpen) playBgm();
 });
 const btnShake = document.getElementById('btnShake');
 const btnClean = document.getElementById('btnClean');
@@ -1327,7 +1403,11 @@ document.getElementById('btnFill').addEventListener('click', () => {
   else startFill();
 });
 document.getElementById('btnRevive').addEventListener('click', () => { ensureAudio(); requestAdFeature('revive'); });
-document.getElementById('btnAdOk').addEventListener('click', playAd);
+btnAdOk.addEventListener('click', () => {
+  if (adOkState === 'retry') { beginAdPrepare(); return; }   // 실패 후 다시 불러오기
+  if (adOkState !== 'ready') return;                         // 로딩 중엔 무시 (disabled 안전망)
+  playAd();
+});
 document.getElementById('btnAdCancel').addEventListener('click', closeAd);
 
 // 남은 횟수 배지 + 소진 시 빨간 비활성화
@@ -1369,11 +1449,17 @@ function buildChain(elId, m) {
       s.className = 'bill';
       s.style.width = def.w * SC + 'px';
       s.style.height = def.h * SC + 'px';
-      s.style.background = def.base;
-      s.style.borderColor = def.edge;
-      s.style.color = def.ink;
-      s.style.fontSize = Math.max(8, def.h * SC * 0.34) + 'px';
-      s.textContent = def.corner;
+      if (def.sprite) {
+        // 실사 스프라이트 미리보기 (액면 숫자는 아트에 박혀 있음)
+        s.style.border = 'none';
+        s.style.background = `url(public/money/bill-${def.sprite}.png) center / 100% 100% no-repeat`;
+      } else {
+        s.style.background = def.base;
+        s.style.borderColor = def.edge;
+        s.style.color = def.ink;
+        s.style.fontSize = Math.max(8, def.h * SC * 0.34) + 'px';
+        s.textContent = def.corner;
+      }
     }
     el.appendChild(s);
   });
@@ -1460,6 +1546,15 @@ window.__mm = {
     shaking: performance.now() < shakeUntil,
     queue: [...queue],
     bodies: engine ? moneyBodies().map(b => ({ t: b.plugin.money.tier, x: +b.position.x.toFixed(1), y: +b.position.y.toFixed(1) })) : [],
+  }),
+  // 소리 문제 진단용: "재생 중인데 무음"(suspended 컨텍스트) 같은 상태를 밖에서 볼 수 있게
+  audio: () => ({
+    ctx: audioCtx ? audioCtx.state : null,
+    chainWired: !!bgmGain,
+    bgmPaused: bgm.paused, bgmTime: +bgm.currentTime.toFixed(2),
+    bgmReady: bgm.readyState, bgmError: bgm.error ? String(bgm.error.code) : null,
+    bgmSrcOk: !!bgm.currentSrc, bgmVolume: bgm.volume,
+    bgmMuted, sfxMuted,
   }),
 };
 })();

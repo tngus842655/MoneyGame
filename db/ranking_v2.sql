@@ -49,6 +49,9 @@ $$;
 
 -- 3) 점수 제출: 이번주/이번달 두 버킷에 upsert (낮은 점수는 무시) ------------
 --    ※ 이 함수만 바뀐 경우 이 블록만 다시 실행하면 된다 (create or replace).
+--    비현실적으로 큰 점수는 조작으로 보고 조용히 버린다. 상한 1억 원:
+--    오만원 합체를 쉼 없이 이어가도 한 판에 수백만 원대라 정상 플레이로는
+--    닿을 수 없는 값이다 (클라이언트 신고형 랭킹의 최소한의 방어선).
 create or replace function submit_score(p_player_id uuid, p_nickname text, p_score bigint)
 returns void
 language plpgsql
@@ -56,7 +59,8 @@ security definer
 set search_path = public
 as $$
 begin
-  if p_player_id is null or p_score is null or p_score <= 0 then
+  if p_player_id is null or p_score is null or p_score <= 0
+     or p_score > 100000000 then
     return;
   end if;
   -- 주간은 최신 1행만: 주가 바뀐 뒤 첫 제출에서 내 지난주 행을 정리
