@@ -29,24 +29,16 @@ document.getElementById('btnAdminClose').addEventListener('click', () => {
 });
 
 // 홈 화면 관리자 버튼 — 서버 is_admin이 true라고 답한 기기에서만 보인다.
-// is_admin이 아직 DB에 없거나 호출이 실패하면 버튼은 숨겨진 채로 두고,
+// 판별(RPC + localStorage 캐시)은 js/admin-mode.js가 한 번만 하고, 여기서는
+// 그 결과를 구독만 한다. 판별이 실패하면 버튼은 숨겨진 채로 두고,
 // 타이틀 7연타가 백업 입구로 남는다 (권한 자체는 어차피 get_admin_stats가 지킴).
 const btnAdmin = document.getElementById('btnAdmin');
 btnAdmin.addEventListener('click', open);
 
-(async function showIfAdmin(retried) {
-  const sb = window.supabaseClient;
-  const pid = window.Ranking && window.Ranking.playerId && window.Ranking.playerId();
-  if (!sb || !pid) {
-    // 초기화 경합(스크립트 로드 직후) 대비 한 번만 재시도
-    if (!retried) setTimeout(() => showIfAdmin(true), 1500);
-    return;
-  }
-  try {
-    const { data, error } = await sb.rpc('is_admin', { p_player_id: pid });
-    if (!error && data === true) btnAdmin.classList.remove('hidden');
-  } catch (e) {}
-})();
+if (window.AdminMode) {
+  btnAdmin.classList.toggle('hidden', !window.AdminMode.active());
+  window.AdminMode.onChange((on) => btnAdmin.classList.toggle('hidden', !on));
+}
 
 async function open() {
   overlay.classList.remove('hidden');

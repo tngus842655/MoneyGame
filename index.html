@@ -206,8 +206,8 @@
   }
   /* 구매한 기기(body.no-ads — js/toss-iap.js가 붙인다): 배너 자리와 버튼의 AD 배지를
      없앤다. 토스 SDK에 배너 해제 API가 없어서 js/toss-ads.js가 슬롯 내용을 비운다 */
-  body.no-ads #adBanner { display:none; }
-  body.no-ads #hud button.ad::after { content:none; }
+  body.no-ads #adBanner, body.admin-free #adBanner { display:none; }
+  body.no-ads #hud button.ad::after, body.admin-free #hud button.ad::after { content:none; }
 
   /* 안드로이드 뒤로가기 2번 종료 안내 (js/capacitor-bridge.js가 .show 토글),
      인앱결제 결과 안내 (js/toss-iap.js) */
@@ -528,6 +528,7 @@
   <script src="lib/capacitor.js"></script>
   <script src="js/toss-safearea.js"></script>
   <script src="js/supabase-init.js"></script>
+  <script src="js/admin-mode.js"></script>
   <!-- 인앱결제(광고 제거)는 광고보다 먼저 — toss-ads가 부팅 때 NoAds.owned()를 보고
        배너를 붙일지 정한다 -->
   <script src="js/toss-iap.js"></script>

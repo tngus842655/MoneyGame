@@ -190,12 +190,21 @@ AdMob.addListener('bannerAdFailedToLoad', (error) => {
 
 // ---------------------------------------------------------------- 시작
 // initialize가 끝나기 전에 배너/보상형을 요청하면 무시되므로 반드시 이어서 호출한다.
+// 관리자 기기(js/admin-mode.js)는 무효 트래픽 방지를 위해 광고를 아예 부르지 않는다 —
+// 기능은 game.js가 광고 제거 구매자와 같은 흐름으로 광고 없이 실행한다.
+const adminFree = () => !!(window.AdminMode && window.AdminMode.active());
 AdMob.initialize({ initializeForTesting: cfg.testing })
   .then(() => {
+    if (adminFree()) return;
     startBanner();
     loadRewarded();
   })
   .catch((error) => console.error('[admob] 초기화 실패:', error));
+
+// 관리자 판별(서버 답)이 첫 실행 도중 도착하면 그 자리에서 배너를 걷는다
+if (window.AdminMode) window.AdminMode.onChange((on) => {
+  if (on) AdMob.removeBanner().catch(() => {});
+});
 
 window.AdsBridge = {
   rewardedAvailable: () => true,

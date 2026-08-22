@@ -614,7 +614,9 @@ function requestAdFeature(kind) {
   // HUD 버튼을 스치기만 해도 횟수가 날아갔다 (실기기 피드백 2026-08-22).
   // 사용 횟수(각 5회)와 부활 1회 제한도 그대로다 — 랭킹이 있는 게임이라 결제한 사람만
   // 무제한이면 순위표가 무너진다. 파는 건 "광고 없음"이지 "더 셈"이 아니다.
-  adFreeFlow = !!(window.NoAds && window.NoAds.owned());
+  // 관리자 기기(js/admin-mode.js)도 같은 흐름 — 무효 트래픽 방지로 광고를 안 부른다
+  adFreeFlow = !!(window.NoAds && window.NoAds.owned()) ||
+               !!(window.AdminMode && window.AdminMode.active());
   pendingAdAction = kind;
   adOpen = true;
   aiming = false;
@@ -1523,7 +1525,8 @@ document.getElementById('btnAdCancel').addEventListener('click', closeAd);
 // 광고 제거를 산 기기에서는 "📺 광고 보고"라는 글씨가 거짓말이 된다 — 문구를 바꿔 준다.
 // (AD 배지와 배너는 body.no-ads로 CSS가 걷어낸다 — index.html)
 function syncAdFreeLabels() {
-  const free = !!(window.NoAds && window.NoAds.owned());
+  const free = !!(window.NoAds && window.NoAds.owned()) ||
+               !!(window.AdminMode && window.AdminMode.active());
   document.getElementById('btnRevive').textContent =
     free ? '💚 부활하기 (동전 제거)' : '📺 광고 보고 부활 (동전 제거)';
   btnShake.title = free ? '통 흔들기' : '통 흔들기 (광고)';
@@ -1531,6 +1534,7 @@ function syncAdFreeLabels() {
 }
 syncAdFreeLabels();
 if (window.NoAds) window.NoAds.onChange(syncAdFreeLabels);
+if (window.AdminMode) window.AdminMode.onChange(syncAdFreeLabels);
 
 function updateFeatUi() {
   for (const [kind, btn] of [['shake', btnShake], ['clean', btnClean]]) {
