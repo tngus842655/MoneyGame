@@ -605,33 +605,29 @@ function requestAdFeature(kind) {
     if (featUses[kind] <= 0) return;
     if (kind === 'shake' && performance.now() < shakeUntil) return;
   }
-  // ── 광고 제거(인앱결제) 구매자: 광고를 건너뛰고 바로 실행 ──
-  // 사용 횟수(각 5회)와 부활 1회 제한은 그대로 둔다 — 랭킹이 있는 게임이라
-  // 결제한 사람만 무제한이면 순위표가 무너진다. 파는 건 "광고 없음"이지 "더 셈"이 아니다.
-  if (window.NoAds && window.NoAds.owned()) {
-    aiming = false;
-    activePointerId = null;
-    blip(880, 0.12, 'triangle', 0.1);
-    if (kind === 'revive') { doRevive(); return; }
-    featUses[kind]--;
-    updateFeatUi();
-    if (kind === 'shake') startShake();
-    else if (kind === 'clean') cleanCoins();
-    return;
-  }
+  // 광고 제거(인앱결제) 구매자는 광고를 건너뛴다. 다만 확인 팝업은 그대로 띄운다 —
+  // 광고 흐름에서는 이 팝업이 오탭 방어막까지 겸했는데, 광고와 같이 없애 버리니
+  // HUD 버튼을 스치기만 해도 횟수가 날아갔다 (실기기 피드백 2026-08-22).
+  // 사용 횟수(각 5회)와 부활 1회 제한도 그대로다 — 랭킹이 있는 게임이라 결제한 사람만
+  // 무제한이면 순위표가 무너진다. 파는 건 "광고 없음"이지 "더 셈"이 아니다.
+  adFreeFlow = !!(window.NoAds && window.NoAds.owned());
   pendingAdAction = kind;
   adOpen = true;
   aiming = false;
   activePointerId = null;
   if (kind === 'revive') {
-    // 게임오버 버튼 자체가 이미 "광고 보고 부활"이므로 확인 없이 바로 광고 재생
+    // 게임오버 화면의 버튼 자체가 이미 "부활"이라고 적힌 확인 절차다 (오탭 위험도 낮다)
+    if (adFreeFlow) { closeAd(); runFeature('revive'); return; }   // 닫고 실행 — 광고 흐름과 같은 순서
     playAd();
     return;
   }
   const coinLabel = mode.key === 'krw' ? '500원 이하 동전' : '25¢ 이하 동전';
   // 팝업 타이틀은 기능명으로 — "광고 보기" 같은 일반 문구보다 무엇을 얻는지가 먼저 보이게.
   // 아이콘은 HUD 버튼과 같은 스프라이트(public/icons/)를 써서 어떤 기능인지 이어지게 한다.
-  const texts = {
+  const texts = adFreeFlow ? {
+    shake: { title: '통 흔들기', desc: '통을 좌우로 5초간 흔들어서\n돈을 골고루 섞어요!' },
+    clean: { title: '동전 제거', desc: `${coinLabel}을 모두 제거해서\n공간을 확보해요!` },
+  } : {
     shake: { title: '통 흔들기', desc: '광고를 보면 통을 좌우로 5초간 흔들어서\n돈을 골고루 섞을 수 있어요!' },
     clean: { title: '동전 제거', desc: `광고를 보면 ${coinLabel}을 모두 제거해서\n공간을 확보할 수 있어요!` },
   };
@@ -644,12 +640,33 @@ function requestAdFeature(kind) {
   titleEl.append(icon, ` ${texts[kind].title}`);
   document.getElementById('adConfirmText').textContent = texts[kind].desc;
   document.getElementById('adConfirm').classList.remove('hidden');
-  beginAdPrepare();   // 팝업을 여는 순간 광고 로드 시작 — 준비되면 버튼 활성화
+  if (adFreeFlow) setAdOkState('ready');   // 기다릴 광고가 없다
+  else beginAdPrepare();                   // 팝업을 여는 순간 광고 로드 시작 — 준비되면 버튼 활성화
+}
+
+// 기능 실행 한 곳 — 광고를 봤든(playRewardedAd/playTestAd) 광고 제거를 샀든 여기로 온다.
+// 횟수 차감은 호출한 쪽 사정에 따라 다르므로(광고는 보상 확정 시점에 미리 깎는다)
+// charged로 구분한다.
+function runFeature(kind, charged) {
+  blip(880, 0.12, 'triangle', 0.1);
+  if (kind === 'revive') {
+    if (state === 'over' && !reviveUsed) doRevive();
+    return;
+  }
+  if (state !== 'playing') return;
+  if (!charged) {
+    if (featUses[kind] <= 0) return;
+    featUses[kind]--;
+    updateFeatUi();
+  }
+  if (kind === 'shake') startShake();
+  else if (kind === 'clean') cleanCoins();
 }
 
 function closeAd() {
   adOpen = false;
   pendingAdAction = null;
+  adFreeFlow = false;
   if (adCountdown) { clearInterval(adCountdown); adCountdown = null; }
   adPrepareSeq++;                    // 닫힌 팝업의 늦은 로드 콜백 무시 (beginAdPrepare)
   clearTimeout(adPrepareTimer);
@@ -671,11 +688,13 @@ const AD_PREPARE_TIMEOUT_MS = 12000;   // 이 시간 안에 로드가 안 끝나
 let adOkState = 'ready';               // 'loading' | 'ready' | 'retry'
 let adPrepareSeq = 0;                  // 팝업이 닫히면 +1 — 늦게 도착한 콜백 구분용
 let adPrepareTimer = 0;
+let adFreeFlow = false;                // 광고 제거 구매자의 확인 팝업인가 (광고 없이 바로 실행)
 
 function setAdOkState(s) {
   adOkState = s;
   btnAdOk.disabled = s === 'loading';
   btnAdOk.textContent =
+    adFreeFlow ? '사용하기' :
     s === 'loading' ? '광고 불러오는 중…' :
     s === 'retry' ? '광고 다시 불러오기' : '광고 보고 사용하기';
   document.getElementById('adConfirmStatus').classList.toggle('hidden', s !== 'retry');
@@ -747,17 +766,8 @@ function playRewardedAd(bridge) {
         floatTexts.push({ x: W / 2, y: 320, text: '광고를 끝까지 보면 사용할 수 있어요', t: 0, life: 1600, size: 16, color: '#8a90a5' });
         return;
       }
-      blip(880, 0.12, 'triangle', 0.1);
-      if (action === 'revive') {
-        if (state === 'over' && !reviveUsed) doRevive();
-      } else if (state === 'playing' && action && (charged || featUses[action] > 0)) {
-        if (!charged) {          // onEarned를 못 받은 경우의 안전망 (기존 동작)
-          featUses[action]--;
-          updateFeatUi();
-        }
-        if (action === 'shake') startShake();
-        else if (action === 'clean') cleanCoins();
-      }
+      // charged=false면 runFeature가 여기서 차감한다 (onEarned를 못 받은 경우의 안전망)
+      if (action) runFeature(action, charged);
     },
     onFail: () => {
       closeAd();
@@ -782,15 +792,7 @@ function playTestAd() {
     } else {
       const action = pendingAdAction;
       closeAd();
-      blip(880, 0.12, 'triangle', 0.1);
-      if (action === 'revive') {
-        if (state === 'over' && !reviveUsed) doRevive();
-      } else if (state === 'playing' && action && featUses[action] > 0) {
-        featUses[action]--;
-        updateFeatUi();
-        if (action === 'shake') startShake();
-        else if (action === 'clean') cleanCoins();
-      }
+      if (action) runFeature(action);
     }
   }, 1000);
 }
@@ -1498,6 +1500,12 @@ document.getElementById('btnFill').addEventListener('click', () => {
 });
 document.getElementById('btnRevive').addEventListener('click', () => { ensureAudio(); requestAdFeature('revive'); });
 btnAdOk.addEventListener('click', () => {
+  if (adFreeFlow) {                                          // 광고 제거 구매자 — 광고 없이 실행
+    const action = pendingAdAction;
+    closeAd();
+    runFeature(action);
+    return;
+  }
   if (adOkState === 'retry') { beginAdPrepare(); return; }   // 실패 후 다시 불러오기
   if (adOkState !== 'ready') return;                         // 로딩 중엔 무시 (disabled 안전망)
   playAd();
