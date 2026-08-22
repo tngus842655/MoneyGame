@@ -270,6 +270,9 @@ function initEngine() {
     Bodies.rectangle(WALL_X - 40, H / 2, 80, H * 3, opts),          // left
     Bodies.rectangle(W - WALL_X + 40, H / 2, 80, H * 3, opts),      // right
     Bodies.rectangle(W / 2, FLOOR_TOP + 45, W * 2, 90, opts),       // floor
+    // 천장 (화면 위 훨씬 밖, 밑면 y=-320) — 흔들기로 튄 조각이 벽 꼭대기(y=-740)를
+    // 넘어 통 밖으로 떨어져 영영 못 돌아오는 사고 방지. 정상 플레이 튐(≥-100 부근)에는 안 닿는다
+    Bodies.rectangle(W / 2, -360, W * 2, 80, opts),                 // ceiling
   ]);
   Events.on(engine, 'collisionStart', collectMerges);
   Events.on(engine, 'collisionActive', collectMerges);
@@ -333,6 +336,11 @@ function processMerges(now) {
     const my = (a.position.y + b.position.y) / 2;
     const vx = (a.velocity.x + b.velocity.x) / 2;
     const vy = (a.velocity.y + b.velocity.y) / 2;
+    // 흔들기로 튄 조각은 화면 밖에서도 합쳐진다 — 연출(터짐·점수 텍스트)만은
+    // 화면 안쪽에 붙여서, 특히 잭팟이 안 보이는 데서 터져 조각이 증발한 것처럼
+    // 보이는 일이 없게 한다 (합쳐진 조각 자체는 원래 위치에서 생성돼 떨어진다)
+    const fx = Math.min(W - 40, Math.max(40, mx));
+    const fy = Math.min(H - 60, Math.max(60, my));
     a.plugin.money.dead = b.plugin.money.dead = true;
     Composite.remove(engine.world, a);
     Composite.remove(engine.world, b);
@@ -342,8 +350,8 @@ function processMerges(now) {
       // 비고 나머지 조각은 그대로다 (보드 리셋 없음 — 티어 정의의 밸런스 주석 참고)
       let total = def.value * 4;
       if (state === 'playing') total = mergeScore(total, now).total;
-      spawnBurst(mx, my, 34, ['#ffd76e', '#ffe9a8', '#fff', '#f7b2c4']);
-      floatTexts.push({ x: mx, y: my, text: '💸 잭팟! +' + mode.format(total), t: 0, life: 1600, size: 24, color: '#e0608a' });
+      spawnBurst(fx, fy, 34, ['#ffd76e', '#ffe9a8', '#fff', '#f7b2c4']);
+      floatTexts.push({ x: fx, y: fy, text: '💸 잭팟! +' + mode.format(total), t: 0, life: 1600, size: 24, color: '#e0608a' });
       sfx.jackpot();
       if (state === 'playing') startRain(now);
     } else {
@@ -359,10 +367,10 @@ function processMerges(now) {
       Body.setAngle(nb, ang);
       let total = nDef.value, comboNow = 0;
       if (state === 'playing') ({ total, combo: comboNow } = mergeScore(nDef.value, now));
-      spawnBurst(mx, my, 10 + tier * 2, ['#fff', '#ffe9a8', hexA('#ffd76e', 0.9)]);
-      floatTexts.push({ x: mx, y: my - 10, text: '+' + mode.format(total), t: 0, life: 1000, size: 15 + tier, color: '#f2789f' });
+      spawnBurst(fx, fy, 10 + tier * 2, ['#fff', '#ffe9a8', hexA('#ffd76e', 0.9)]);
+      floatTexts.push({ x: fx, y: fy - 10, text: '+' + mode.format(total), t: 0, life: 1000, size: 15 + tier, color: '#f2789f' });
       if (comboNow >= 2) {
-        floatTexts.push({ x: mx, y: my - 36, text: `🔥 ${comboNow}콤보!`, t: 0, life: 1100, size: Math.min(15 + comboNow * 2, 26), color: '#ff8c42' });
+        floatTexts.push({ x: fx, y: fy - 36, text: `🔥 ${comboNow}콤보!`, t: 0, life: 1100, size: Math.min(15 + comboNow * 2, 26), color: '#ff8c42' });
       }
       sfx.merge(tier);
     }
@@ -518,18 +526,43 @@ function updateShake(now) {
     // 기울어진 통 기준으로 중력 회전 + 수평 성분 증폭으로 화끈한 슬로싱
     engine.gravity.x = Math.sin(th) * 1.5;
     engine.gravity.y = Math.cos(th);
-    // 자주 위로 튕기고 회전도 줘서 골고루 섞이게
+    // 자주 위로 튕기고 회전도 줘서 골고루 섞이게.
+    // 같은 조각이 연달아 뽑히면 상승 속도가 누적돼 화면 밖 수백 px까지 날아가므로
+    // 위쪽 속도를 -11로 상한 — 이러면 최고 상승도 화면 위 ~250px 안쪽이라 금방 돌아온다
     if (Math.random() < 0.3) {
       const bs = moneyBodies();
       if (bs.length) {
         const b = bs[(Math.random() * bs.length) | 0];
-        Body.setVelocity(b, { x: b.velocity.x + (Math.random() - 0.5) * 9, y: b.velocity.y - 4 - Math.random() * 5 });
+        Body.setVelocity(b, {
+          x: b.velocity.x + (Math.random() - 0.5) * 9,
+          y: Math.max(b.velocity.y - 4 - Math.random() * 5, -11),
+        });
         Body.setAngularVelocity(b, b.angularVelocity + (Math.random() - 0.5) * 0.5);
       }
     }
   } else if (engine.gravity.x !== 0 || engine.gravity.y !== 1) {
     engine.gravity.x = 0;
     engine.gravity.y = 1;
+  }
+}
+
+// ---------------------------------------------------------------- 통 밖 조각 회수
+// 흔들기·고속 충돌로 벽을 뚫거나(터널링) 통 밖으로 샌 조각을 주기적으로 찾아
+// 위쪽 가운데로 되살려 떨어뜨린다. 천장·속도 상한이 있어 거의 안 일어나지만,
+// 돈다발 하나가 사라지면 잭팟이 영영 불가능해지므로 마지막 안전망으로 둔다.
+let boundsCheckAt = 0;
+function recoverLostBodies(now) {
+  if (now < boundsCheckAt) return;
+  boundsCheckAt = now + 1500;
+  for (const b of moneyBodies()) {
+    const { x, y } = b.position;
+    if (x > -60 && x < W + 60 && y > -900 && y < H + 250) continue;
+    const def = mode.tiers[b.plugin.money.tier];
+    const half = halfW(def);
+    Body.setPosition(b, { x: Math.min(W - WALL_X - half - 2, Math.max(WALL_X + half + 2, x)), y: DROP_Y });
+    Body.setVelocity(b, { x: 0, y: 2 });
+    Body.setAngularVelocity(b, 0);
+    b.plugin.money.born = now;   // 위험 판정 유예 리셋 — 떨어져 자리 잡을 시간을 준다
   }
 }
 
@@ -1348,6 +1381,7 @@ function step(now, dt) {
     if (state === 'playing') updateShake(now);
     Engine.update(engine, dt);
     processMerges(now);
+    recoverLostBodies(now);
     if (state === 'playing') {
       updateRain(now);
       updateFill(now);
