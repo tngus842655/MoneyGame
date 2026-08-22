@@ -26,3 +26,15 @@ if (toss) {
 } else {
   console.log('dist/ 준비 완료:', FILES.join(', '));
 }
+
+// --promo-test: 프로모션 지급 테스트 번들 — dist의 프로모션 코드에 TEST_ 접두사를 붙인다.
+// 예산을 쓰지 않고 지급 흐름을 검증하는 용도로, 테스트 푸시로만 쓸 것.
+// ⚠️ 이 번들을 검수에 제출하면 안 된다 — 라이브에 나가면 유저에게 실제 지급이 되지 않는다.
+if (process.argv.includes('--promo-test')) {
+  const p = 'dist/js/toss-promotion.js';
+  const js = readFileSync(p, 'utf8');
+  const out = js.replace(/const PROMOTION_CODE = '(?!TEST_)/, "const PROMOTION_CODE = 'TEST_");
+  if (out === js) throw new Error('--promo-test: 프로모션 코드를 찾지 못해 치환에 실패했다');
+  writeFileSync(p, out);
+  console.log('⚠️  프로모션 TEST_ 코드로 치환됨 — 테스트 푸시 전용 번들 (검수 제출 금지)');
+}

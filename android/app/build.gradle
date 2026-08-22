@@ -74,8 +74,8 @@ android {
         // 1 = 플레이스토어 첫 업로드. 올릴 때마다 versionCode를 1씩 올린다.
         // versionCode는 한 번 쓴 번호를 재사용할 수 없고 Console에서도 고칠 수 없다.
         // versionName은 스토어에 보이는 표시용이라 자유롭게 붙여도 된다.
-        versionCode 2
-        versionName "1.1"
+        versionCode 3
+        versionName "1.2"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

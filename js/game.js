@@ -27,44 +27,51 @@ const MODES = {
     key:'krw', name:'원화', symbol:'₩',
     format: v => v.toLocaleString('ko-KR') + '원',
     tiers: [
-      { kind:'coin', r:24, value:10,    label:'10',  metal:'copper' },
-      { kind:'coin', r:30, value:50,    label:'50',  metal:'silver' },
-      { kind:'coin', r:37, value:100,   label:'100', metal:'silver' },
-      { kind:'coin', r:45, value:500,   label:'500', metal:'gold'   },
-      // 지폐 크기는 IconScout 스프라이트(public/money/bill-*.png, 비율 1.62)에 맞춤 —
-      // 면적은 예전(2.1 비율) 크기와 거의 같게 유지해 게임 밸런스는 그대로다.
-      { kind:'bill', w:108, h:67,  value:1000,  corner:'1000',  name:'천원',   sprite:'1000',  base:'#b7d3ee', edge:'#6e97c4', ink:'#3c6a9e', face:0 },
-      { kind:'bill', w:130, h:80,  value:5000,  corner:'5000',  name:'오천원', sprite:'5000',  base:'#f6cfae', edge:'#d89a6a', ink:'#a5622e', face:1 },
-      { kind:'bill', w:154, h:95,  value:10000, corner:'10000', name:'만원',   sprite:'10000', base:'#bce3c3', edge:'#6fae7f', ink:'#3f7d51', face:2 },
-      { kind:'bill', w:180, h:111, value:50000, corner:'50000', name:'오만원', sprite:'50000', base:'#f7dfa0', edge:'#d9b24a', ink:'#96731f', face:3 },
+      // 크기 위계: 돈다발(최고 티어)을 기준으로 아래 단위를 한 번 더 ~8-10% 줄였다.
+      // 오만원↔돈다발, 500원↔천원이 화면에서 거의 같아 보인다는 피드백 반영 —
+      // 특히 500원(d84→70)은 천원(90×56)보다 확실히 작게. 조각이 전체적으로
+      // 작아진 만큼 통(400px)에 여유가 생겨 밸런스는 약간 순해진다.
+      { kind:'coin', r:20, value:10,    label:'10',  metal:'copper', sprite:'10'  },
+      { kind:'coin', r:25, value:50,    label:'50',  metal:'silver', sprite:'50'  },
+      { kind:'coin', r:30, value:100,   label:'100', metal:'silver', sprite:'100' },
+      { kind:'coin', r:35, value:500,   label:'500', metal:'gold',   sprite:'500' },
+      // 지폐 크기는 IconScout 스프라이트(public/money/bill-*.png, 물결 실루엣
+      // 그대로 트림만 한 비율 1.66)에 맞춤
+      { kind:'bill', w:90,  h:54, value:1000,  corner:'1000',  name:'천원',   sprite:'1000',  base:'#b7d3ee', edge:'#6e97c4', ink:'#3c6a9e', face:0 },
+      { kind:'bill', w:109, h:66, value:5000,  corner:'5000',  name:'오천원', sprite:'5000',  base:'#f6cfae', edge:'#d89a6a', ink:'#a5622e', face:1 },
+      { kind:'bill', w:130, h:78, value:10000, corner:'10000', name:'만원',   sprite:'10000', base:'#bce3c3', edge:'#6fae7f', ink:'#3f7d51', face:2 },
+      { kind:'bill', w:154, h:93, value:50000, corner:'50000', name:'오만원', sprite:'50000', base:'#f7dfa0', edge:'#d9b24a', ink:'#96731f', face:3 },
+      // 최고 티어: 오만원 돈다발(같은 IconScout 시리즈). 오만원 두 장이
+      // 여기로 합쳐지고, 돈다발 두 개가 만나야 잭팟(보드 리셋)이 터진다 —
+      // 잭팟을 한 단계 밀어서 판이 무한정 이어지지 않게 하는 밸런스 장치.
+      // stack: 스프라이트가 아무 변도 깎지 않은 원본 실루엣(비율 1.39)이고,
+      // 물리도 사각형이 아니라 실루엣 convex hull 다각형(STACK_HULL)을 쓴다 —
+      // 잘리는 부분도, 보이지 않는 충돌 공간도 없게. makePiece/drawBill 참고.
+      { kind:'bill', stack:true, w:195, h:140, value:100000, corner:'100000', name:'돈다발', sprite:'100000', base:'#f0d372', edge:'#d9b24a', ink:'#96731f', face:3 },
     ],
   },
-  usd: {
-    key:'usd', name:'달러', symbol:'$',
-    format: v => v < 100
-      ? v + '¢'
-      : '$' + (v / 100).toLocaleString('en-US', { minimumFractionDigits: v % 100 ? 2 : 0, maximumFractionDigits: 2 }),
-    tiers: [
-      { kind:'coin', r:24, value:1,     label:'1',   metal:'copper' },
-      { kind:'coin', r:30, value:5,     label:'5',   metal:'silver' },
-      { kind:'coin', r:37, value:10,    label:'10',  metal:'silver' },
-      { kind:'coin', r:45, value:25,    label:'25',  metal:'gold'   },
-      { kind:'bill', w:124, h:58, value:100,   corner:'1',   name:'ONE',     base:'#c9dcc1', edge:'#87a983', ink:'#4e7a4a', face:0 },
-      { kind:'bill', w:148, h:70, value:500,   corner:'5',   name:'FIVE',    base:'#d6d1ea', edge:'#9a92c4', ink:'#655a9e', face:1 },
-      { kind:'bill', w:176, h:83, value:1000,  corner:'10',  name:'TEN',     base:'#f3d5b2', edge:'#cf9f6b', ink:'#a4713a', face:2 },
-      { kind:'bill', w:205, h:97, value:10000, corner:'100', name:'HUNDRED', base:'#b9d9e1', edge:'#6fa6b4', ink:'#3f7b8c', face:3 },
-    ],
-  },
+  // (달러 모드는 초기 기획의 잔재로 UI에서 진입로가 없어 2026-08-22 제거 —
+  //  되살리려면 git 히스토리의 MODES.usd 티어 정의를 참고)
 };
 
 // ---------------------------------------------------------------- sprites
 // 지폐 실사 스프라이트 (IconScout · Juty Jang 원화 지폐 시리즈, tools/money-assets.mjs로 가공).
 // 로드가 끝나기 전이나 파일이 없으면 drawBill의 기존 벡터 그리기로 폴백한다.
 const BILL_IMGS = {};
-for (const v of ['1000', '5000', '10000', '50000']) {
+for (const v of ['1000', '5000', '10000', '50000', '100000']) {
   const im = new Image();
   im.src = 'public/money/bill-' + v + '.png';
   BILL_IMGS[v] = im;
+}
+
+// 동전 실사 스프라이트 (brand/money/coin-raw.png 시트의 앞면·뒷면을
+// tools/money-assets.mjs가 원형으로 추출). 로드가 끝나기 전에는
+// drawCoin의 기존 벡터 그리기로 폴백한다.
+const COIN_IMGS = {};
+for (const v of ['10', '50', '100', '500', '10-back', '50-back', '100-back', '500-back']) {
+  const im = new Image();
+  im.src = 'public/money/coin-' + v + '.png';
+  COIN_IMGS[v] = im;
 }
 
 // ---------------------------------------------------------------- helpers
@@ -174,9 +181,14 @@ let mode = null;
 let state = 'menu';               // menu | playing | over
 let engine = null;
 let score = 0;
-let best = { krw: 0, usd: 0 };
+let best = { krw: 0 };
 let queue = [];                   // [current, next]
+// 동전 조각마다 앞면(숫자)/뒷면(그림)이 랜덤 — 파일명 접미사('' | '-back')를
+// 큐와 나란히 들고 가서, 대기 미리보기와 실제 떨어지는 면이 항상 일치하게 한다.
+let queueFaces = [];
+const randFace = () => Math.random() < 0.5 ? '' : '-back';
 let canDrop = true;
+let lastDrop = null;   // 마지막으로 떨어뜨린 조각 — 스폰 지점 클리어 판정용 (spawnAreaClear)
 let pendingNextAt = 0;            // timestamp when next piece becomes ready
 let aimX = W / 2;
 let aiming = false;
@@ -195,7 +207,7 @@ let shakeUntil = 0;          // 🌀 통 흔들기 종료 시각 (흔드는 동�
 let adOpen = false;          // 광고 팝업 열림 (물리·입력 정지)
 let pendingAdAction = null;  // 'shake' | 'clean'
 let adCountdown = null;
-const MAX_FEAT = 3;          // 한 판에 흔들기/동전제거 각각 최대 사용 횟수
+const MAX_FEAT = 5;          // 한 판에 흔들기/동전제거 각각 최대 사용 횟수
 let featUses = { shake: MAX_FEAT, clean: MAX_FEAT };
 let reviveUsed = false;      // 📺 부활은 한 판에 1회
 let scoreSubmitted = false;  // 랭킹 중복 제출 방지 (한 판에 1번만)
@@ -222,7 +234,6 @@ let mergeQueue = [];
 
 try {
   best.krw = +localStorage.getItem('money-merge-best-krw') || 0;
-  best.usd = +localStorage.getItem('money-merge-best-usd') || 0;
 } catch (e) {}
 
 // 최고 기록을 서버(best_scores) 기준으로 동기화 — ranking.js가 로드 후
@@ -269,16 +280,36 @@ function collectMerges(e) {
   }
 }
 
-function makePiece(tier, x, y) {
+// 돈다발 물리 다각형: 스프라이트 실루엣의 convex hull (bbox 중심 원점, w/h 비율).
+// tools/money-assets.mjs가 계산해 출력한 값을 복사한 것 — 아트를 바꾸면 재생성.
+// STACK_HULL_OFFSET은 hull centroid(=Matter의 body.position)와 bbox 중심의 차이.
+const STACK_HULL = [[-0.5,-0.0553],[-0.4562,-0.2549],[-0.4156,-0.346],[0.3281,-0.5],[0.3703,-0.4588],[0.4984,0.0293],[0.4875,0.1161],[0.4375,0.3091],[0.4063,0.346],[-0.3281,0.4978],[-0.3672,0.4718],[-0.4938,-0.0033]];
+const STACK_HULL_OFFSET = [-0.0008,-0.0007];
+
+function makePiece(tier, x, y, face) {
   const def = mode.tiers[tier];
   const phys = { restitution: 0.08, friction: 0.35, frictionStatic: 0.5, density: 0.0012 };
   let body;
   if (def.kind === 'coin') {
     body = Bodies.circle(x, y, def.r, phys);
+  } else if (def.stack) {
+    // 돈다발: 사각형+chamfer로는 스택 모서리의 빈 공간(조각이 허공에 얹히는
+    // 보이지 않는 충돌 영역)을 없앨 수 없어서, 물리 자체를 실루엣 hull로 만든다.
+    const verts = STACK_HULL.map(([hx, hy]) => ({ x: hx * def.w, y: hy * def.h }));
+    body = Bodies.fromVertices(x, y, [verts], phys);
   } else {
-    body = Bodies.rectangle(x, y, def.w, def.h, { ...phys, chamfer: { radius: Math.min(14, def.h * 0.2) } });
+    // 실사 스프라이트 지폐는 실루엣 모서리가 크게 둥글어서 chamfer도 그에 맞춘다
+    // (h×0.18 — tools/_analyze-stack 실측). 작은 chamfer면 물리 모서리가 아트
+    // 밖으로 튀어나와 보이지 않는 턱이 생긴다.
+    const cham = def.sprite ? def.h * 0.18 : Math.min(14, def.h * 0.2);
+    body = Bodies.rectangle(x, y, def.w, def.h, { ...phys, chamfer: { radius: cham } });
   }
-  body.plugin.money = { tier, born: performance.now() };
+  // 동전 면: 드롭은 큐에서 정한 면을 이어받고(미리보기와 일치), 병합·비·자동
+  // 진행처럼 미리보기 없이 생기는 조각은 여기서 랜덤으로 정한다.
+  body.plugin.money = {
+    tier, born: performance.now(),
+    face: def.kind === 'coin' ? (face !== undefined ? face : randFace()) : '',
+  };
   Composite.add(engine.world, body);
   return body;
 }
@@ -364,7 +395,8 @@ function mergeScore(value, now) {
 
 // ---------------------------------------------------------------- bonus rain
 function rainTier() {
-  const w = [4, 3, 3, 2.2, 1.2, 0.6, 0.25];   // 동전 위주, 가끔 지폐 (최고 티어 제외)
+  // 동전 위주, 가끔 지폐 — 최고 티어 제외 (모드별 티어 수에 맞춰 잘라 씀)
+  const w = [4, 3, 3, 2.2, 1.2, 0.6, 0.25, 0.1].slice(0, mode.tiers.length - 1);
   let t = Math.random() * w.reduce((a, b) => a + b, 0);
   for (let i = 0; i < w.length; i++) {
     t -= w[i];
@@ -686,6 +718,8 @@ function playRewardedAd(bridge) {
     // 안 와서(최대 10초 타임아웃) onFinish만 기다리면 차감 표시가 한참 늦게 보임
     onEarned: () => {
       const action = pendingAdAction;
+      // 광고 시청 통계 (관리자 화면용) — 실제 광고의 보상 확정만 센다
+      if (action && window.StatsTrack) window.StatsTrack.adView(action);
       if (action && action !== 'revive' && state === 'playing' && featUses[action] > 0) {
         featUses[action]--;
         updateFeatUi();
@@ -797,6 +831,7 @@ function resetBoard() {
   roundStartBest = best[mode.key];
   canDrop = true;
   pendingNextAt = 0;
+  lastDrop = null;
   aimX = W / 2;
   aiming = false;
   activePointerId = null;
@@ -821,22 +856,42 @@ function resetBoard() {
   fillNextAt = 0;
   updateFeatUi();
   queue = [randTier(), randTier()];
+  queueFaces = [randFace(), randFace()];
 }
 
 function drop(now) {
   if (state !== 'playing' || !canDrop || raining || filling) return;
   const def = mode.tiers[queue[0]];
   const x = Math.min(W - WALL_X - halfW(def) - 2, Math.max(WALL_X + halfW(def) + 2, aimX));
-  makePiece(queue[0], x, DROP_Y);
+  const b = makePiece(queue[0], x, DROP_Y, queueFaces[0]);
+  Body.setVelocity(b, { x: 0, y: 4 });   // 초기 낙하 속도 — 스폰 지점을 빨리 비워 연타 간격 단축
+  lastDrop = b;
   sfx.drop();
   canDrop = false;
-  pendingNextAt = now + 550;
+  // 예전엔 고정 550ms 쿨다운이었는데 연타가 답답하다는 피드백으로 갈아엎음:
+  // 최소 160ms(다음 조각 교체 연출)만 두고, 실제 게이트는 spawnAreaClear —
+  // 직전 조각이 착지하기 한참 전이라도 스폰 지점만 비면 바로 다음을 떨어뜨린다.
+  pendingNextAt = now + 160;
+}
+
+// 직전 조각이 스폰 지점을 비웠나 — 연타 간격의 실질 게이트. 다음에 떨어뜨릴
+// 조각(queue[1], updateQueue의 shift 전이라 [1]이 다음 차례)과 겹치지 않을 만큼
+// 낙하했거나, 조준이 옆으로 충분히 비켜나 있으면 바로 드롭할 수 있다.
+// 동시에 여러 개가 뭉쳐 나오는 것(같은 자리에 겹쳐 스폰 → 튕김)만 막는다.
+function spawnAreaClear() {
+  if (!lastDrop || lastDrop.plugin.money.dead) return true;
+  const ld = mode.tiers[lastDrop.plugin.money.tier];
+  const nd = mode.tiers[queue[1]];
+  if (Math.abs(aimX - lastDrop.position.x) > halfW(ld) + halfW(nd) + 4) return true;
+  return lastDrop.position.y - DROP_Y > halfH(ld) + halfH(nd) + 4;
 }
 
 function updateQueue(now) {
-  if (!canDrop && pendingNextAt && now >= pendingNextAt) {
+  if (!canDrop && pendingNextAt && now >= pendingNextAt && spawnAreaClear()) {
     queue.shift();
     queue.push(randTier());
+    queueFaces.shift();
+    queueFaces.push(randFace());
     canDrop = true;
     pendingNextAt = 0;
   }
@@ -917,7 +972,19 @@ function goMenu() {
 }
 
 // ---------------------------------------------------------------- drawing
-function drawCoin(c, def, forcePlain) {
+function drawCoin(c, def, face) {
+  // 실사 스프라이트가 준비돼 있으면 그걸 그린다 — 물리도 그리기도 같은 원이라
+  // 지폐와 달리 확대(bleed) 없이 1:1로 얹으면 된다. face는 조각별 면 접미사
+  // ('' 앞면 숫자 | '-back' 뒷면 그림); 뒷면이 로드 전이면 앞면으로 폴백.
+  const ready = k => {
+    const i = COIN_IMGS[k];
+    return i && i.complete && i.naturalWidth ? i : null;
+  };
+  const im = def.sprite && (ready(def.sprite + (face || '')) || ready(def.sprite));
+  if (im) {
+    c.drawImage(im, -def.r, -def.r, def.r * 2, def.r * 2);
+    return;
+  }
   const r = def.r, pal = METALS[def.metal];
   const g = c.createRadialGradient(-r * 0.35, -r * 0.4, r * 0.15, 0, 0, r);
   g.addColorStop(0, pal.light);
@@ -996,10 +1063,21 @@ function drawFace(c, style, ink, w, h, symbol) {
 
 function drawBill(c, def, symbol) {
   // 실사 스프라이트가 준비돼 있으면 그걸 그린다 (tools/money-assets.mjs에서
-  // 수평화·크롭해 bbox를 꽉 채움). 6% 키워 그려서 물리 모서리까지 확실히 덮는다.
+  // 물결 실루엣을 그대로 남기고 투명 여백만 트림). 바탕 사각형은 깔지 않는다 —
+  // 실루엣 곡선 밖으로 판이 비쳐 "잘린 직사각형"처럼 보인다는 피드백.
+  // 대신 물리보다 살짝 크게 그려서 물리 둘레의 투명 갭(보이지 않는 충돌 공간)을
+  // 아트가 덮게 한다. 배율·chamfer(makePiece)는 tools/_analyze-stack 실측값:
+  // 낱장 1.08 + h×0.18 → 잔여 갭 ≤ ~4px, 돈다발 1.10 + h×0.2 → 상하 ~7px.
   const im = def.sprite && BILL_IMGS[def.sprite];
   if (im && im.complete && im.naturalWidth) {
-    const bw = def.w * 1.06, bh = def.h * 1.06;
+    if (def.stack) {
+      // 돈다발은 물리가 실루엣 hull이라 확대 없이 1:1로 그린다. body.position은
+      // hull의 centroid — bbox 중심과의 차이(STACK_HULL_OFFSET)만 되돌린다.
+      c.drawImage(im, -def.w / 2 - STACK_HULL_OFFSET[0] * def.w,
+                      -def.h / 2 - STACK_HULL_OFFSET[1] * def.h, def.w, def.h);
+      return;
+    }
+    const bw = def.w * 1.08, bh = def.h * 1.08;
     c.drawImage(im, -bw / 2, -bh / 2, bw, bh);
     return;
   }
@@ -1044,8 +1122,8 @@ function drawBill(c, def, symbol) {
   c.fillText(def.name, 0, h / 2 - 7);
 }
 
-function drawPiece(c, def) {
-  if (def.kind === 'coin') drawCoin(c, def);
+function drawPiece(c, def, face) {
+  if (def.kind === 'coin') drawCoin(c, def, face);
   else drawBill(c, def, mode.symbol);
 }
 
@@ -1107,7 +1185,7 @@ function drawBodies() {
     ctx.save();
     ctx.translate(b.position.x, b.position.y);
     ctx.rotate(b.angle);
-    drawPiece(ctx, def);
+    drawPiece(ctx, def, b.plugin.money.face);
     ctx.restore();
   }
 }
@@ -1127,7 +1205,7 @@ function drawHeld(now) {
 
   ctx.save();
   ctx.translate(x, y);
-  drawPiece(ctx, def);
+  drawPiece(ctx, def, queueFaces[0]);
   ctx.restore();
 }
 
@@ -1257,6 +1335,8 @@ function step(now, dt) {
       }
       if (combo && now >= comboExpires) combo = 0;
       maybeLiveSubmit(now);
+      // 앱인토스 프로모션: 실제 진행 시간만 누적 (팝업·백그라운드는 위에서 걸러짐)
+      if (window.TossPromotion) window.TossPromotion.tick(dt);
     }
   }
 }
@@ -1437,14 +1517,20 @@ function buildChain(elId, m) {
     }
     const s = document.createElement('span');
     if (def.kind === 'coin') {
-      const pal = METALS[def.metal];
       const d = def.r * 2 * SC;
       s.className = 'coin';
       s.style.width = s.style.height = d + 'px';
-      s.style.background = `radial-gradient(circle at 35% 30%, ${pal.light}, ${pal.base} 60%, ${pal.dark})`;
-      s.style.color = pal.text;
-      s.style.fontSize = Math.max(7, d * 0.34) + 'px';
-      s.textContent = def.label;
+      if (def.sprite) {
+        // 진화 체인 미리보기는 그림면(다보탑·벼·이순신·학)으로 — 숫자면보다 예쁘고,
+        // 액면은 크기 순서·색으로 충분히 읽힌다
+        s.style.background = `url(public/money/coin-${def.sprite}-back.png) center / 100% 100% no-repeat`;
+      } else {
+        const pal = METALS[def.metal];
+        s.style.background = `radial-gradient(circle at 35% 30%, ${pal.light}, ${pal.base} 60%, ${pal.dark})`;
+        s.style.color = pal.text;
+        s.style.fontSize = Math.max(7, d * 0.34) + 'px';
+        s.textContent = def.label;
+      }
     } else {
       s.className = 'bill';
       s.style.width = def.w * SC + 'px';

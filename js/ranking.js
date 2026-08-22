@@ -338,6 +338,7 @@ window.Ranking = {
   close,
   myName,
   setName,
+  playerId,   // 통계·관리자 판별도 같은 기기 식별자를 쓴다 (js/stats-track.js, js/admin.js)
   refreshNickDisplays,
   submitScore: score => {
     pendingSubmit = Promise.resolve(API.submitScore(score)).catch(() => {});
