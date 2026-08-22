@@ -42,8 +42,10 @@ const MODES = {
       { kind:'bill', w:130, h:78, value:10000, corner:'10000', name:'만원',   sprite:'10000', base:'#bce3c3', edge:'#6fae7f', ink:'#3f7d51', face:2 },
       { kind:'bill', w:154, h:93, value:50000, corner:'50000', name:'오만원', sprite:'50000', base:'#f7dfa0', edge:'#d9b24a', ink:'#96731f', face:3 },
       // 최고 티어: 오만원 돈다발(같은 IconScout 시리즈). 오만원 두 장이
-      // 여기로 합쳐지고, 돈다발 두 개가 만나야 잭팟(보드 리셋)이 터진다 —
-      // 잭팟을 한 단계 밀어서 판이 무한정 이어지지 않게 하는 밸런스 장치.
+      // 여기로 합쳐지고, 돈다발 두 개가 만나면 잭팟 — 다발 2개만 사라지고
+      // 보너스 점수 + 축하 동전 몇 개가 떨어진다. 보드는 그대로 남는다
+      // (2026-08-22 밸런스: 예전엔 보드 전체를 리셋해서, 잭팟에 도달할 실력이면
+      // 판이 무한정 이어지는 루프가 됐다 — 리셋을 없애 잔여물이 쌓이며 끝이 오게).
       // stack: 스프라이트가 아무 변도 깎지 않은 원본 실루엣(비율 1.39)이고,
       // 물리도 사각형이 아니라 실루엣 convex hull 다각형(STACK_HULL)을 쓴다 —
       // 잘리는 부분도, 보이지 않는 충돌 공간도 없게. makePiece/drawBill 참고.
@@ -336,7 +338,8 @@ function processMerges(now) {
     Composite.remove(engine.world, b);
 
     if (tier >= mode.tiers.length - 1) {
-      // two biggest bills → jackpot: bonus, board reset, then a bonus rain
+      // 돈다발 2개 → 잭팟: 보너스 점수 + 축하 동전 레인. 다발 2개가 빠진 자리만
+      // 비고 나머지 조각은 그대로다 (보드 리셋 없음 — 티어 정의의 밸런스 주석 참고)
       let total = def.value * 4;
       if (state === 'playing') total = mergeScore(total, now).total;
       spawnBurst(mx, my, 34, ['#ffd76e', '#ffe9a8', '#fff', '#f7b2c4']);
@@ -399,8 +402,8 @@ function mergeScore(value, now) {
 
 // ---------------------------------------------------------------- bonus rain
 function rainTier() {
-  // 동전 위주, 가끔 지폐 — 최고 티어 제외 (모드별 티어 수에 맞춰 잘라 씀)
-  const w = [4, 3, 3, 2.2, 1.2, 0.6, 0.25, 0.1].slice(0, mode.tiers.length - 1);
+  // 축하 레인은 동전만 — 지폐가 섞이면 합칠 재료가 돼 오히려 판을 풀어 준다
+  const w = [4, 3, 3, 2.2];
   let t = Math.random() * w.reduce((a, b) => a + b, 0);
   for (let i = 0; i < w.length; i++) {
     t -= w[i];
@@ -411,15 +414,13 @@ function rainTier() {
 
 function startRain(now) {
   raining = true;
-  setFilling(false);          // 잭팟 리셋이 자동 진행보다 우선
+  setFilling(false);          // 잭팟 연출이 자동 진행보다 우선
   aiming = false;
   activePointerId = null;
-  for (const b of moneyBodies()) {
-    b.plugin.money.dead = true;
-    spawnBurst(b.position.x, b.position.y, 5, ['#fff', '#ffe9a8', '#ffd76e']);
-    Composite.remove(engine.world, b);
-  }
-  const count = 20 + Math.floor(Math.random() * 11);   // 20~30개
+  // 보드는 건드리지 않는다 — 돈다발 2개가 빠진 자리(≈통의 1/4)가 비는 것이 보상이고,
+  // 남은 조각이 판마다 쌓여야 게임에 끝이 온다 (2026-08-22 밸런스, 티어 주석 참고).
+  // 레인은 축하용 동전 몇 개: 낙하 동안 입력이 잠기고 위험 판정도 쉰다 (step의 raining 체크)
+  const count = 6 + Math.floor(Math.random() * 4);   // 6~9개
   rainPlan = [];
   let t = now + 600;
   for (let i = 0; i < count; i++) {
