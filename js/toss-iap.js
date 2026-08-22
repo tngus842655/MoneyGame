@@ -173,7 +173,8 @@ const ownedNote = document.getElementById('noAdsOn');
 const toastEl = document.getElementById('shopToast');
 const dlg = document.getElementById('buyDlg');
 const btnBuyOk = document.getElementById('btnBuyOk');
-const refundHomeLink = document.getElementById('linkRefundHome');
+// 홈 하단 링크 — 유료 상품을 파는 환경에서만 보인다 (구글플레이·일반 브라우저엔 결제가 없다)
+const shopLinks = [document.getElementById('linkRefundHome'), document.getElementById('linkSellerHome')];
 let toastTimer = 0;
 
 function toast(msg) {
@@ -191,8 +192,8 @@ function closeDlg() {
 function syncUi() {
   // 광고 흔적(배너 자리·버튼 AD 배지)을 CSS로 걷어내는 스위치
   document.body.classList.toggle('no-ads', owned);
-  // 환불 안내 링크는 유료 상품을 파는 환경에서만 (구글플레이·일반 브라우저엔 결제가 없다)
-  if (refundHomeLink) refundHomeLink.classList.toggle('hidden', !sellable() && !owned);
+  const shopVisible = sellable() || owned;
+  for (const a of shopLinks) { if (a) a.classList.toggle('hidden', !shopVisible); }
   if (!btn) return;
   const show = !owned && sellable();
   btn.textContent = show ? `🚫 광고 제거 · ${product.displayAmount}` : '';
