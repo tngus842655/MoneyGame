@@ -176,6 +176,10 @@ function pauseBgm() { bgm.pause(); }
 // ---------------------------------------------------------------- state
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
+// 월드(W×H) → 화면 배치 정보 (fit이 갱신). 토스 전체화면에서는 캔버스가 뷰포트
+// 전체를 덮고 월드는 safe area 안쪽에 놓이므로, 월드 밖 캔버스 영역(left/top/
+// right/bottom, 월드 좌표)은 drawBackground가 하늘·잔디를 이어 그린다.
+const view = { s: 1, ox: 0, oy: 0, left: 0, top: 0, right: W, bottom: H };
 
 let mode = null;
 let state = 'menu';               // menu | playing | over
@@ -1144,20 +1148,23 @@ function drawPiece(c, def, face) {
 }
 
 function drawBackground(now, dt) {
-  const g = ctx.createLinearGradient(0, 0, 0, H);
+  // 토스 전체화면에서는 월드 밖 캔버스 영역(view.left~right/top~bottom)까지
+  // 하늘·잔디를 이어 그려서 기종 비율과 무관하게 빈 띠가 안 생기게 한다
+  const vx = view.left, vy = view.top, vw = view.right - view.left, vh = view.bottom - view.top;
+  const g = ctx.createLinearGradient(0, 0, 0, H);   // 0~H 밖은 끝 색이 그대로 이어짐
   g.addColorStop(0, '#b7dcf5');
   g.addColorStop(0.65, '#e2f3fc');
   g.addColorStop(1, '#eefaf0');
   ctx.fillStyle = g;
   // 흔들기 회전 중에는 모서리가 비지 않게 넓게 칠함
-  if (now < shakeUntil) ctx.fillRect(-W, -H, W * 3, H * 3);
-  else ctx.fillRect(0, 0, W, H);
+  if (now < shakeUntil) ctx.fillRect(vx - W, vy - H, vw + W * 2, vh + H * 2);
+  else ctx.fillRect(vx, vy, vw, vh);
 
   // clouds
   ctx.fillStyle = 'rgba(255,255,255,0.85)';
   for (const cl of clouds) {
     cl.x += cl.v * dt;
-    if (cl.x > W + 70) cl.x = -70;
+    if (cl.x > view.right + 70) cl.x = view.left - 70;
     const s = cl.s;
     ctx.beginPath();
     ctx.arc(cl.x, cl.y, 22 * s, 0, TAU);
@@ -1173,8 +1180,8 @@ function drawBackground(now, dt) {
   ctx.fillStyle = '#93cf8e';
   ctx.beginPath(); ctx.ellipse(W * 0.82, H + 40, 290, 125, 0, Math.PI, TAU); ctx.fill();
   ctx.fillStyle = '#7cc47c';
-  if (now < shakeUntil) ctx.fillRect(-W, H - 22, W * 3, 22 + H);
-  else ctx.fillRect(0, H - 22, W, 22);
+  if (now < shakeUntil) ctx.fillRect(view.left - W, H - 22, (view.right - view.left) + W * 2, 22 + H);
+  else ctx.fillRect(view.left, H - 22, view.right - view.left, Math.max(22, view.bottom - (H - 22)));
 
   if (state === 'menu') return;
 
@@ -1327,7 +1334,7 @@ function drawFx(dt) {
   // danger tint
   if (state === 'playing' && overTimer > 0) {
     ctx.fillStyle = `rgba(240,80,95,${0.05 + 0.05 * Math.sin(performance.now() / 70)})`;
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(view.left, view.top, view.right - view.left, view.bottom - view.top);
   }
 }
 
@@ -1390,7 +1397,7 @@ function loop(now) {
 // ---------------------------------------------------------------- input
 function toGameX(e) {
   const rect = canvas.getBoundingClientRect();
-  return (e.clientX - rect.left) / rect.width * W;
+  return (e.clientX - rect.left - view.ox) / view.s;
 }
 canvas.addEventListener('pointerdown', e => {
   ensureAudio();
@@ -1592,15 +1599,53 @@ document.getElementById('comboTip').textContent =
 
 // ---------------------------------------------------------------- canvas fit
 function fit() {
-  // 하단 배너 높이 실측: 자리표시자 60px / 토스 실배너 96px (+마진 2px)
+  // 하단 배너 높이 실측: 자리표시자 60px / 토스 실배너 96px (+마진 2px).
+  // 광고 제거 구매(body.no-ads → display:none)면 offsetHeight 0 — 자리를 남기지 않는다
   const adEl = document.getElementById('adBanner');
-  const bannerH = (adEl.offsetHeight || 60) + 2;
-  // 전체화면 웹뷰에서는 body 패딩이 safe area(상태바/홈 인디케이터) 몫 — 가용 영역에서 제외
+  const bannerH = adEl.offsetHeight ? adEl.offsetHeight + 2 : 0;
+  // 오버레이가 배너를 피해 내용을 배치할 수 있게 CSS로도 알려 둔다 (body.in-toss .overlay)
+  document.documentElement.style.setProperty('--bh', bannerH + 'px');
+
+  if (document.body.classList.contains('in-toss')) {
+    // 토스 전체화면: 캔버스가 뷰포트 전체(상태바 뒤까지)를 덮는다. 월드(W×H)는
+    // safe area·배너를 뺀 영역에 맞춰 가운데 배치 — 기종 비율 때문에 남는 공간은
+    // 몸통 배경이 아니라 캔버스 위 하늘·잔디(drawBackground)가 채워 빈 띠가 없다.
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const rootCS = getComputedStyle(document.documentElement);
+    const inset = (name) => parseFloat(rootCS.getPropertyValue(name)) || 0;
+    const sat = inset('--sat'), sab = inset('--sab'), sal = inset('--sal'), sar = inset('--sar');
+    const aw = Math.max(1, vw - sal - sar);
+    const ah = Math.max(1, vh - sat - sab - bannerH);
+    let s = Math.min(aw / W, ah / H);
+    if (!isFinite(s) || s <= 0) s = 1;
+    view.s = s;
+    view.ox = sal + (aw - W * s) / 2;
+    view.oy = sat + (ah - H * s) / 2;
+    view.left = -view.ox / s;
+    view.top = -view.oy / s;
+    view.right = (vw - view.ox) / s;
+    view.bottom = (vh - view.oy) / s;
+    canvas.style.width = vw + 'px';
+    canvas.style.height = vh + 'px';
+    adEl.style.width = '';   // 배너 너비는 CSS 담당 (in-toss는 화면 고정 배치)
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    const bw = Math.round(vw * dpr), bh = Math.round(vh * dpr);
+    if (canvas.width !== bw || canvas.height !== bh) {
+      canvas.width = bw;
+      canvas.height = bh;
+    }
+    ctx.setTransform(s * dpr, 0, 0, s * dpr, view.ox * dpr, view.oy * dpr);
+    return;
+  }
+
+  // 일반 브라우저/구글플레이: 기존 카드 레이아웃 — body 패딩(safe area) 제외 영역에 맞춤
   const bodyCS = getComputedStyle(document.body);
   const padV = (parseFloat(bodyCS.paddingTop) || 0) + (parseFloat(bodyCS.paddingBottom) || 0);
   const padH = (parseFloat(bodyCS.paddingLeft) || 0) + (parseFloat(bodyCS.paddingRight) || 0);
   let s = Math.min((window.innerWidth - padH) / W, (window.innerHeight - padV - bannerH) / H);
   if (!isFinite(s) || s <= 0) s = 1;
+  view.s = s; view.ox = 0; view.oy = 0;
+  view.left = 0; view.top = 0; view.right = W; view.bottom = H;
   canvas.style.width = W * s + 'px';
   canvas.style.height = H * s + 'px';
   // 토스 실배너는 화면 너비 100%가 규격이라 CSS(.toss-banner)가 담당
