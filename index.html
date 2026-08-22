@@ -125,7 +125,7 @@
   }
   /* 다른 오버레이 위에 겹쳐 뜨는 레이어 (문서 순서와 무관하게 항상 위로) */
   #rank { z-index:20; }
-  #adConfirm, #adPlay, #confirmDlg { z-index:30; }
+  #adConfirm, #adPlay, #confirmDlg, #buyDlg { z-index:30; }
   #nickEditor { z-index:40; }
   #updateDlg { z-index:50; }   /* 업데이트 안내는 무엇보다 위 (앱 시작 시 표시) */
   .overlay .sheet {
@@ -149,8 +149,8 @@
     font-size:clamp(17px, 6.5vmin, 23px); padding:16px 28px; min-width:min(285px, 92%);
   }
   button[data-mode="krw"] { background:#5fa8e8; }
-  #btnAgain, #btnAdOk, #btnNickSave, #btnConfirmOk, #btnUpdateNow { background:#f78fb3; }
-  #btnMenu, #btnAdCancel, #btnNickCancel, #btnConfirmCancel, #btnUpdateLater { background:#9aa5c4; }
+  #btnAgain, #btnAdOk, #btnNickSave, #btnConfirmOk, #btnUpdateNow, #btnBuyOk { background:#f78fb3; }
+  #btnMenu, #btnAdCancel, #btnNickCancel, #btnConfirmCancel, #btnUpdateLater, #btnBuyCancel { background:#9aa5c4; }
   #btnRevive { background:#67b984; position:relative; }
   /* 한 판 1회 제한 표시 — HUD 광고 버튼의 횟수 배지와 같은 시각 언어 */
   #btnRevive::after {
@@ -166,14 +166,40 @@
   /* 스토어 정책상 앱 안에도 개인정보처리방침 링크가 있어야 함 (구글플레이: 광고 ID 사용 앱).
      웹뷰에서는 js/legal-link.js가 가로채 인앱 브라우저로 연다 */
   .overlay .legal { font-size:12px; color:#8a90a5; text-decoration:underline; text-underline-offset:3px; }
-  /* 안드로이드 뒤로가기 2번 종료 안내 (js/capacitor-bridge.js가 .show 토글) */
-  #backToast {
+  .legalRow { display:flex; justify-content:center; gap:14px; flex-wrap:wrap; }
+  /* 인앱결제 "광고 제거" 버튼 — 메뉴의 주 행동(게임시작)과 경쟁하지 않게 한 단계 조용하게 */
+  .overlay button.act.buy {
+    background:#eef1f7; color:#5b6478; font-size:clamp(12px, 4vmin, 14px);
+    padding:9px 20px; min-width:auto; box-shadow:0 3px 0 rgba(0,0,0,.08);
+  }
+  .overlay button.act.buy:disabled { opacity:.6; }
+  /* 구매 확인 팝업 (#buyDlg) — 상품 설명은 왼쪽 정렬이라야 읽힌다 */
+  .buyList {
+    margin:0; padding:0 4px; list-style:none; text-align:left;
+    font-size:clamp(12px, 4vmin, 14px); color:#6b7480; line-height:1.6;
+  }
+  .buyList li { position:relative; padding-left:17px; margin:5px 0; }
+  .buyList li::before { content:'·'; position:absolute; left:5px; font-weight:800; color:#5fa8e8; }
+  .buyList b { color:#2c3242; font-weight:700; }
+  .buyWarn {
+    background:#fff6e0; border:1px solid #ffdf9b; border-radius:10px;
+    padding:9px 12px; font-size:clamp(11px, 3.6vmin, 13px) !important;
+    color:#8a6a1f !important; line-height:1.5; text-align:left;
+  }
+  /* 구매한 기기(body.no-ads — js/toss-iap.js가 붙인다): 배너 자리와 버튼의 AD 배지를
+     없앤다. 토스 SDK에 배너 해제 API가 없어서 js/toss-ads.js가 슬롯 내용을 비운다 */
+  body.no-ads #adBanner { display:none; }
+  body.no-ads #hud button.ad::after { content:none; }
+
+  /* 안드로이드 뒤로가기 2번 종료 안내 (js/capacitor-bridge.js가 .show 토글),
+     인앱결제 결과 안내 (js/toss-iap.js) */
+  #backToast, #shopToast {
     position:fixed; left:50%; bottom:calc(var(--sab) + 76px); transform:translateX(-50%);
     z-index:60; pointer-events:none; white-space:nowrap;
     background:rgba(40,46,60,.88); color:#fff; font-size:13px; font-weight:600;
     padding:9px 18px; border-radius:999px; opacity:0; transition:opacity .2s ease;
   }
-  #backToast.show { opacity:1; }
+  #backToast.show, #shopToast.show { opacity:1; }
   .chainBox { margin-top:2px; }
   .chainBox .cap { font-size:12px; font-weight:700; color:#8a90a5; margin-bottom:4px; }
   .chain { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:3px; max-width:min(360px, 94vw); }
@@ -335,13 +361,22 @@
         <p>같은 돈끼리 부딪히면 더 큰 돈이 돼요!<br>돈을 떨어뜨려서 제일 큰 돈을 만들어 보세요.<br>
           왼쪽 위 🏆 랭킹에서 내 순위도 확인할 수 있어요!</p>
         <button class="mode" data-mode="krw">▶️ 게임시작</button>
+        <!-- 인앱결제 "광고 제거" — 토스 안에서 상품 조회가 되면 js/toss-iap.js가 hidden을 벗긴다.
+             구매한 기기에서는 버튼 대신 아래 안내 문구가 뜬다 -->
+        <button class="act buy hidden" id="btnNoAds"></button>
+        <p class="tip hidden" id="noAdsOn">✅ 광고 제거 적용 중 · 광고 없이 바로 사용돼요</p>
         <div class="chainBox"><div class="cap">돈 불리는 순서</div><div class="chain" id="chainKrw"></div></div>
         <p class="tip" id="comboTip"></p>
         <!-- 앱인토스 프로모션 고지 — 토스 안에서만 표시 (js/toss-promotion.js가 hidden 해제) -->
         <p class="tip hidden" id="promoNote">🎁 매일 1분 플레이하면 토스포인트 5원!<br>
           하루 1회 · 9월 30일까지 · 예산 소진 시 사전 고지 없이 종료될 수 있어요</p>
-        <a class="legal" id="linkPrivacy" href="https://tngus842655.github.io/MoneyGame/privacy.html"
-           target="_blank" rel="noopener">개인정보처리방침</a>
+        <span class="legalRow">
+          <a class="legal" id="linkPrivacy" href="https://tngus842655.github.io/MoneyGame/privacy.html"
+             target="_blank" rel="noopener">개인정보처리방침</a>
+          <!-- 유료 상품을 파는 환경(토스)에서만 js/toss-iap.js가 hidden을 벗긴다 -->
+          <a class="legal hidden" id="linkRefundHome" href="https://tngus842655.github.io/MoneyGame/refund.html"
+             target="_blank" rel="noopener">구매 및 환불 안내</a>
+        </span>
       </div>
     </div>
 
@@ -382,6 +417,27 @@
         <p id="confirmText"></p>
         <button class="act" id="btnConfirmOk">네</button>
         <button class="act" id="btnConfirmCancel">계속 할래요</button>
+      </div>
+    </div>
+
+    <!-- 인앱결제 구매 확인 (js/toss-iap.js). 토스 주문서로 넘어가기 전에 무엇을 사는지와
+         환불 조건을 먼저 보여준다 — 전자상거래법상 유료 디지털 콘텐츠는 구매 전 고지가
+         필요하고, "횟수가 늘어난다"는 오해로 인한 환불 분쟁도 여기서 막는다 -->
+    <div id="buyDlg" class="overlay hidden">
+      <div class="sheet">
+        <h2>🚫 광고 제거</h2>
+        <ul class="buyList">
+          <li>배너 광고가 <b>사라져요</b></li>
+          <li>통 흔들기 · 동전 제거 · 부활을 <b>광고 없이 바로</b> 사용해요</li>
+          <li>한 번 사면 계속 적용돼요. 기기를 바꿔도 <b>같은 토스 계정</b>이면 그대로예요</li>
+        </ul>
+        <p class="buyWarn">⚠️ 사용 횟수는 늘어나지 않아요.<br>
+          통 흔들기·동전 제거 각 5회, 부활 1회는 구매 여부와 관계없이 같아요.</p>
+        <p class="tip">구매일로부터 7일 이내에 환불을 요청할 수 있어요.<br>
+          <a class="legal" id="linkRefund" href="https://tngus842655.github.io/MoneyGame/refund.html"
+             target="_blank" rel="noopener">구매 및 환불 안내</a></p>
+        <button class="act" id="btnBuyOk">구매하기</button>
+        <button class="act" id="btnBuyCancel">취소</button>
       </div>
     </div>
 
@@ -438,6 +494,7 @@
 
     <div id="adBanner">AD · 배너 광고 영역 (320×50)</div>
     <div id="backToast">한 번 더 누르면 종료됩니다</div>
+    <div id="shopToast"></div><!-- 인앱결제 결과 안내 (js/toss-iap.js) -->
   </div>
 
   <script src="lib/matter.min.js"></script>
@@ -446,6 +503,9 @@
   <script src="lib/capacitor.js"></script>
   <script src="js/toss-safearea.js"></script>
   <script src="js/supabase-init.js"></script>
+  <!-- 인앱결제(광고 제거)는 광고보다 먼저 — toss-ads가 부팅 때 NoAds.owned()를 보고
+       배너를 붙일지 정한다 -->
+  <script src="js/toss-iap.js"></script>
   <!-- 광고: ads-config가 ID를 정하고, 토스 → AdMob 순으로 자기 환경이면 window.AdsBridge를
        차지한다. 순서를 바꾸면 토스 안에서 AdMob이 먼저 자리를 잡아 버린다. -->
   <script src="js/ads-config.js"></script>

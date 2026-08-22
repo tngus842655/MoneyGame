@@ -1,4 +1,5 @@
-// 개인정보처리방침 링크를 실행 환경에 맞는 방법으로 연다.
+// 정책 링크(개인정보처리방침·구매 및 환불 안내)를 실행 환경에 맞는 방법으로 연다.
+// 대상은 a.legal 전부 — 구매 팝업 안의 링크처럼 나중에 추가되는 것도 같이 처리된다.
 // 웹뷰 안에서 그냥 이동해 버리면 게임 화면이 정책 페이지로 덮여 돌아올 방법이 없으므로,
 // 각 플랫폼이 제공하는 "닫기 버튼 있는" 브라우저로 띄운다.
 //   - 앱인토스: AppsInToss.openURL (토스 인앱 브라우저)
@@ -8,8 +9,8 @@
 (() => {
 'use strict';
 
-const link = document.getElementById('linkPrivacy');
-if (!link) return;
+const links = document.querySelectorAll('a.legal');
+if (!links.length) return;
 
 const cap = window.Capacitor;
 let native = false;
@@ -28,15 +29,17 @@ if (native) {
   }
 }
 
-link.addEventListener('click', (e) => {
-  e.preventDefault();
-  try {
-    const opened = native ? Browser.open({ url: link.href }) : window.AppsInToss.openURL(link.href);
-    if (opened && opened.catch) opened.catch(fail);
-  } catch (err) {
-    fail(err);
-  }
-});
+for (const link of links) {
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    try {
+      const opened = native ? Browser.open({ url: link.href }) : window.AppsInToss.openURL(link.href);
+      if (opened && opened.catch) opened.catch(fail);
+    } catch (err) {
+      fail(err);
+    }
+  });
+}
 
 function fail(err) {
   console.error('[legal-link] 정책 페이지 열기 실패:', err);

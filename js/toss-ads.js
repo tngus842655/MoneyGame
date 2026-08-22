@@ -226,8 +226,24 @@ function attachBanner() {
   }
 }
 
+// ---------------------------------------------------------------- 광고 제거 구매자
+// 인앱결제로 "광고 제거"를 산 기기에서는 배너를 아예 안 붙이고 보상형도 미리 받지 않는다.
+// (토스 SDK에 배너 해제 API가 없어서, 이미 붙은 뒤 구매하면 내용을 비우고 슬롯을 숨긴다.)
+const adFree = () => !!(window.NoAds && window.NoAds.owned());
+
+function dropBanner() {
+  const el = document.getElementById('adBanner');
+  if (el) el.textContent = '';
+  document.body.classList.remove('toss-banner');   // 슬롯 숨김(body.no-ads)은 toss-iap.js가 붙인다
+  window.dispatchEvent(new Event('resize'));       // 캔버스 레이아웃 재계산 (game.js fit)
+}
+
 // 시작: 배너 먼저(바로 보이는 지면), 이어서 보상형 미리 로드
-if (!startBanner()) loadRewarded();
+if (adFree()) dropBanner();
+else if (!startBanner()) loadRewarded();
+
+// 게임 도중에 구매하면 그 자리에서 배너를 걷는다
+if (window.NoAds) window.NoAds.onChange((owned) => { if (owned) dropBanner(); });
 
 // 광고 브리지는 토스·AdMob 두 벌이 있고 게임은 window.AdsBridge 하나만 본다.
 // 토스 광고를 실제로 띄울 수 있을 때만 자리를 차지한다 — 그래야 다음에 로드되는

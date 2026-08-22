@@ -605,6 +605,20 @@ function requestAdFeature(kind) {
     if (featUses[kind] <= 0) return;
     if (kind === 'shake' && performance.now() < shakeUntil) return;
   }
+  // ── 광고 제거(인앱결제) 구매자: 광고를 건너뛰고 바로 실행 ──
+  // 사용 횟수(각 5회)와 부활 1회 제한은 그대로 둔다 — 랭킹이 있는 게임이라
+  // 결제한 사람만 무제한이면 순위표가 무너진다. 파는 건 "광고 없음"이지 "더 셈"이 아니다.
+  if (window.NoAds && window.NoAds.owned()) {
+    aiming = false;
+    activePointerId = null;
+    blip(880, 0.12, 'triangle', 0.1);
+    if (kind === 'revive') { doRevive(); return; }
+    featUses[kind]--;
+    updateFeatUi();
+    if (kind === 'shake') startShake();
+    else if (kind === 'clean') cleanCoins();
+    return;
+  }
   pendingAdAction = kind;
   adOpen = true;
   aiming = false;
@@ -1491,6 +1505,18 @@ btnAdOk.addEventListener('click', () => {
 document.getElementById('btnAdCancel').addEventListener('click', closeAd);
 
 // 남은 횟수 배지 + 소진 시 빨간 비활성화
+// 광고 제거를 산 기기에서는 "📺 광고 보고"라는 글씨가 거짓말이 된다 — 문구를 바꿔 준다.
+// (AD 배지와 배너는 body.no-ads로 CSS가 걷어낸다 — index.html)
+function syncAdFreeLabels() {
+  const free = !!(window.NoAds && window.NoAds.owned());
+  document.getElementById('btnRevive').textContent =
+    free ? '💚 부활하기 (동전 제거)' : '📺 광고 보고 부활 (동전 제거)';
+  btnShake.title = free ? '통 흔들기' : '통 흔들기 (광고)';
+  btnClean.title = free ? '동전 제거' : '동전 제거 (광고)';
+}
+syncAdFreeLabels();
+if (window.NoAds) window.NoAds.onChange(syncAdFreeLabels);
+
 function updateFeatUi() {
   for (const [kind, btn] of [['shake', btnShake], ['clean', btnClean]]) {
     const left = featUses[kind];

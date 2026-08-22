@@ -108,6 +108,32 @@
 - 참고: 인앱 광고는 샌드박스에서 지원되지 않으므로 콘솔의 QR 코드로 실기기 테스트가 필요합니다.
   (보상형: 토스 앱 5.227.0+, 배너: 5.241.0+)
 
+### 앱인토스 인앱결제 (IAP) — 광고 제거
+
+`js/toss-iap.js`가 SDK의 `AppsInToss.IAP`로 **"광고 제거"(비소모품, 영구) 한 상품**을
+다룹니다. 게임 쪽은 `window.NoAds` 하나만 봅니다 — `owned()` / `sellable()` /
+`product()` / `purchase()` / `onChange()`.
+
+- **파는 것은 "광고 없음"이지 "더 셈"이 아닙니다.** 구매해도 통 흔들기·동전 제거는
+  한 판 5회, 부활은 1회 제한 그대로고 광고 시청만 건너뜁니다. 랭킹이 있는 게임이라
+  결제한 사람만 무제한이면 순위표가 무너집니다.
+- 구매하면 **배너도 사라집니다** (`body.no-ads` → `#adBanner` 숨김 + 버튼의 AD 배지 제거).
+  토스 SDK에 배너 해제 API가 없어서, 이미 붙은 뒤에 사면 `js/toss-ads.js`가 슬롯 내용을
+  비우고 레이아웃을 다시 계산합니다.
+- 지급은 `processProductGrant` 콜백에서 끝납니다 — 반환값(성공 여부)을 SDK가 토스에
+  그대로 통보하므로 `completeProductGrant`를 따로 부르지 않습니다. **서버가 필요 없습니다.**
+  소유 상태는 `localStorage`(`money-merge-noads`)에 두고, 부팅·복귀 때
+  `getCompletedOrRefundedOrders`로 보정합니다(환불이면 회수). 결제됐는데 지급이 안 끝난
+  주문은 `getPendingOrders` → `completeProductGrant`로 마무리합니다.
+- 주문서로 나갔다 그냥 돌아오면 콜백이 안 올 수 있어, `visibilitychange`에서 주문 내역을
+  다시 확인하고 버튼의 "결제 진행 중…" 상태를 풀어 줍니다.
+- **토스 앱 안에서만 팔립니다** (`IAP.isSupported()`, 토스 5.219.0+). 일반 브라우저와
+  구글플레이(Capacitor) 빌드에서는 상품 조회가 안 되므로 버튼이 뜨지 않습니다 —
+  구글플레이 결제는 별도 SDK가 필요하고 아직 없습니다.
+- 상품 sku는 콘솔 등록 시 자동 발급됩니다. `js/toss-iap.js` 상단 `SKU` 상수에 넣으면
+  그걸 쓰고, 비워 두면 상품 목록의 **비소모품 첫 상품**을 광고 제거로 봅니다.
+- 상품 아이콘(1024×1024)은 `node tools/iap-icons.mjs` → `store/iap/noads-1024.png`.
+
 ### 상단 내비게이션 바 (전체화면)
 
 `apps-in-toss.config.ts`의 `navigationBar` 설정으로 토스 기본 흰색 상단 바를 없앴습니다:
@@ -233,6 +259,7 @@ iOS 웹뷰는 `<audio>`의 volume 속성을 무시하므로, 볼륨은 WebAudio 
 - `js/game.js` — 게임 로직 전체 (물리, 합치기, 렌더링, 입력, 사운드/배경음악)
 - `js/toss-safearea.js` — 전체화면(투명 내비게이션 바) safe area 브리지
 - `js/toss-ads.js` — 앱인토스 인앱 광고 브리지 (배너 + 보상형, 광고 그룹 ID 설정)
+- `js/toss-iap.js` — 앱인토스 인앱결제 "광고 제거" (상품 조회·구매·복원 + 홈 버튼)
 - `js/capacitor-bridge.js` — 안드로이드 하드웨어 뒤로가기 처리 (Capacitor 전용)
 - `js/legal-link.js` — 개인정보처리방침 링크를 환경별 인앱 브라우저로 열기
 - `js/ranking.js` — 랭킹 화면 + Supabase 어댑터 (rpc 기반)
