@@ -36,6 +36,7 @@ const tap = (id) => {
 function handleBack() {
   if (shown('adPlay'))     return;                           // 광고 재생 중엔 무시
   if (shown('updateDlg'))  { tap('btnUpdateLater');   return; }   // 업데이트 안내 → 나중에
+  if (shown('buyDlg'))     { tap('btnBuyCancel');     return; }   // 광고 제거 구매 확인 → 취소
   if (shown('nickEditor')) { tap('btnNickCancel');    return; }
   if (shown('adConfirm'))  { tap('btnAdCancel');      return; }
   if (shown('confirmDlg')) { tap('btnConfirmCancel'); return; }

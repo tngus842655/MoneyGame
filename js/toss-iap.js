@@ -7,13 +7,17 @@
 //   NoAds.purchase()   결제 시작
 //   NoAds.onChange(fn) 소유·상품 상태가 바뀌면 호출 (홈 버튼 갱신용)
 //
-// 토스 앱 밖(일반 브라우저·구글플레이 Capacitor 빌드)에서는 IAP.isSupported()가
-// false라 sellable()이 항상 false다 — 구글플레이는 별도 결제 SDK가 필요하고 아직 없다.
+// 구글플레이(Capacitor) 빌드에서는 js/play-iap.js가 먼저 로드돼 window.NoAds를 차지하고,
+// 그 경우 이 파일은 통째로 물러난다 — 광고 브리지(toss-ads/admob-ads)와 같은 규칙.
+// 일반 브라우저에서는 IAP.isSupported()가 false라 sellable()이 항상 false다.
 //
-// ⚠️ 로드 순서: js/toss-ads.js보다 먼저 와야 한다. 배너를 붙일지 말지를
-//    toss-ads.js가 부팅 시 NoAds.owned()로 판단하기 때문.
+// ⚠️ 로드 순서: js/play-iap.js 뒤, js/toss-ads.js보다 먼저 와야 한다. 배너를 붙일지
+//    말지를 toss-ads.js가 부팅 시 NoAds.owned()로 판단하기 때문.
 (() => {
 'use strict';
+
+// 구글플레이 빌드 — js/play-iap.js가 이미 NoAds와 홈 UI 배선을 차지했다
+if (window.NoAds) return;
 
 // 콘솔에 등록한 "광고 제거" 상품의 sku (2026-08-22 등록, 공급가 3,500원 → 판매가 3,850원).
 // 비우면 상품 목록에서 비소모품 첫 상품을 쓰는 폴백으로 동작한다.

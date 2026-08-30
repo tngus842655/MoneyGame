@@ -190,21 +190,30 @@ AdMob.addListener('bannerAdFailedToLoad', (error) => {
 
 // ---------------------------------------------------------------- 시작
 // initialize가 끝나기 전에 배너/보상형을 요청하면 무시되므로 반드시 이어서 호출한다.
-// 관리자 기기(js/admin-mode.js)는 무효 트래픽 방지를 위해 광고를 아예 부르지 않는다 —
-// 기능은 game.js가 광고 제거 구매자와 같은 흐름으로 광고 없이 실행한다.
-const adminFree = () => !!(window.AdminMode && window.AdminMode.active());
+// 광고 제거 구매자(js/play-iap.js)와 관리자 기기(js/admin-mode.js — 무효 트래픽 방지)는
+// 광고를 아예 부르지 않는다 — 기능은 game.js가 광고 없이 실행한다 (adFreeFlow).
+// js/toss-ads.js의 같은 이름 게이트와 같은 규칙.
+const adFree = () =>
+  !!(window.NoAds && window.NoAds.owned()) ||
+  !!(window.AdminMode && window.AdminMode.active());
 AdMob.initialize({ initializeForTesting: cfg.testing })
   .then(() => {
-    if (adminFree()) return;
+    if (adFree()) return;
     startBanner();
     loadRewarded();
   })
   .catch((error) => console.error('[admob] 초기화 실패:', error));
 
-// 관리자 판별(서버 답)이 첫 실행 도중 도착하면 그 자리에서 배너를 걷는다
-if (window.AdminMode) window.AdminMode.onChange((on) => {
-  if (on) AdMob.removeBanner().catch(() => {});
-});
+// 게임 도중 광고 제거를 사거나 관리자 판별(서버 답)이 첫 실행 도중 도착하면 그 자리에서
+// 배너를 걷는다. 자리표시자 숨김은 body.no-ads/admin-free CSS가, 캔버스 재계산은
+// resize를 받은 game.js fit()이 맡는다.
+function dropBanner() {
+  AdMob.removeBanner().catch(() => {});
+  document.body.classList.remove('admob-banner');
+  window.dispatchEvent(new Event('resize'));
+}
+if (window.NoAds) window.NoAds.onChange((owned) => { if (owned) dropBanner(); });
+if (window.AdminMode) window.AdminMode.onChange((on) => { if (on) dropBanner(); });
 
 window.AdsBridge = {
   rewardedAvailable: () => true,
