@@ -15,19 +15,22 @@
     --sar: env(safe-area-inset-right, 0px);
     --bh: 0px; /* 하단 배너 실측 높이 — game.js fit()이 갱신 (없으면 0) */
   }
-  /* 토스 전체화면: 캔버스가 화면 전체(상태바 뒤까지)를 덮고, 월드 밖 남는 영역은
-     game.js(fit/drawBackground)가 하늘·잔디를 이어 그린다 — 기종 화면 비율과
-     무관하게 위·아래 빈 띠가 안 생김. DOM UI는 safe area만큼 안쪽으로 들어온다 */
-  body.in-toss { background:#d4edfb; padding:0; }
-  body.in-toss #gameArea { position:fixed; inset:0; }
-  body.in-toss canvas { border-radius:0; box-shadow:none; }
-  body.in-toss .overlay {
+  /* 전체화면 배치 — 토스(in-toss)와 구글플레이 네이티브(in-app) 공용 (8/30 통일):
+     캔버스가 화면 전체를 덮고, 월드 밖 남는 영역은 game.js(fit/drawBackground)가
+     하늘·잔디를 이어 그린다 — 기종 화면 비율과 무관하게 위·아래 빈 띠가 안 생김.
+     (in-app이 카드 배치였을 땐 광고 제거를 사면 배너 62px만큼 위 여백이 더 커졌다)
+     DOM UI는 safe area만큼 안쪽으로 들어온다 — in-app은 env()가 0이면 그대로 */
+  body.in-toss, body.in-app { background:#d4edfb; padding:0; }
+  body.in-toss #gameArea, body.in-app #gameArea { position:fixed; inset:0; }
+  body.in-toss canvas, body.in-app canvas { border-radius:0; box-shadow:none; }
+  body.in-toss .overlay, body.in-app .overlay {
     border-radius:0;
     padding:var(--sat) var(--sar) calc(var(--sab) + var(--bh)) var(--sal);
   }
   /* 캔버스가 fixed로 빠지면서 흐름 배치가 무너지므로 배너도 화면 하단에 고정.
-     메뉴·게임오버 오버레이(z10)보다 위, 닉네임(40)·업데이트(50) 팝업보다는 아래 */
-  body.in-toss #adBanner {
+     메뉴·게임오버 오버레이(z10)보다 위, 닉네임(40)·업데이트(50) 팝업보다는 아래.
+     in-app에서는 이 자리표시자 위로 AdMob 네이티브 배너가 얹힌다 (js/admob-ads.js) */
+  body.in-toss #adBanner, body.in-app #adBanner {
     border-radius:0; box-shadow:none;
     position:fixed; left:50%; transform:translateX(-50%); bottom:var(--sab);
     width:100vw; z-index:15;
@@ -69,9 +72,6 @@
     width:100vw !important; height:96px; display:block;
     border-radius:0; background:transparent; box-shadow:none; letter-spacing:0;
   }
-  /* 구글플레이(Capacitor) 네이티브 배너는 웹뷰 안이 아니라 그 위 화면 하단에 얹힌다.
-     기본 세로 가운데 정렬이면 자리표시자가 배너보다 한참 위에 떠서 어긋나므로 아래로 붙인다. */
-  body.in-app { align-items:flex-end; }
   /* 네이티브 배너가 그 자리를 덮으므로 어두운 자리표시자는 지우고 높이(50dp)만 비워 둔다.
      로드에 실패했을 때도 같은 클래스를 붙인다 — 자동 갱신으로 나중에 뜰 수 있어 자리는 남긴다. */
   body.admob-banner #adBanner {
@@ -84,12 +84,14 @@
      네이티브 ⋯/X 자리, 상단 가운데는 점수 텍스트 자리라 비워 둔다 */
   #hud { position:absolute; top:12px; left:10px; display:grid; grid-template-columns:repeat(2, 38px); gap:8px; line-height:normal; }
   /* 토스 전체화면에서는 캔버스가 상태바 뒤까지 덮으므로 safe area만큼 내린다 */
-  body.in-toss #hud { top:calc(var(--sat) + 12px); left:calc(var(--sal) + 10px); }
+  body.in-toss #hud, body.in-app #hud { top:calc(var(--sat) + 12px); left:calc(var(--sal) + 10px); }
   /* 홈 화면 음소거 버튼 — 오른쪽 맨 위 가로 배치 (좌상단 🏆와 같은 높이) */
   #menuSound { position:absolute; top:12px; right:12px; display:flex; gap:8px; line-height:normal; z-index:1; }
   /* 토스 안에서는 같은 자리에 네이티브 ⋯/X가 떠 있어 가려지므로 그 아래로 내린다
      (⋯/X는 상태바 바로 밑 ~40px 높이 — safe area 기준 52px면 겹치지 않음) */
   body.in-toss #menuSound { top:calc(var(--sat) + 52px); right:calc(var(--sar) + 12px); }
+  /* in-app은 토스 ⋯/X 버튼이 없으니 안 내리고 safe area만 반영 */
+  body.in-app #menuSound { top:calc(var(--sat) + 12px); right:calc(var(--sar) + 12px); }
   #hud button, #menuSound button {
     position:relative; width:38px; height:38px; border-radius:50%; border:2px solid rgba(255,255,255,.9);
     background:rgba(255,255,255,.55); font-size:18px; cursor:pointer; touch-action:manipulation;
@@ -259,8 +261,8 @@
     box-shadow:0 3px 8px rgba(80,60,20,.25); touch-action:manipulation; z-index:1;
   }
   /* 토스 전체화면: 상태바를 피해 safe area만큼 내린다 */
-  body.in-toss #btnRank { top:calc(var(--sat) + 12px); left:calc(var(--sal) + 12px); }
-  body.in-toss #btnAdmin { top:calc(var(--sat) + 12px); left:calc(var(--sal) + 66px); }
+  body.in-toss #btnRank, body.in-app #btnRank { top:calc(var(--sat) + 12px); left:calc(var(--sal) + 12px); }
+  body.in-toss #btnAdmin, body.in-app #btnAdmin { top:calc(var(--sat) + 12px); left:calc(var(--sal) + 66px); }
   /* 관리자 통계 버튼 — 랭킹 오른쪽. 서버 is_admin이 true인 기기에서만
      js/admin.js가 hidden을 벗긴다 (기본은 모두에게 숨김) */
   #btnAdmin { left:66px; background:#cfe3f7; }

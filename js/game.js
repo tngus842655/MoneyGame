@@ -1645,8 +1645,10 @@ function fit() {
   // 오버레이가 배너를 피해 내용을 배치할 수 있게 CSS로도 알려 둔다 (body.in-toss .overlay)
   document.documentElement.style.setProperty('--bh', bannerH + 'px');
 
-  if (document.body.classList.contains('in-toss')) {
-    // 토스 전체화면: 캔버스가 뷰포트 전체(상태바 뒤까지)를 덮는다. 월드(W×H)는
+  // 전체화면 배치: 토스(in-toss) + 구글플레이 네이티브(in-app, 8/30 통일 — 카드 배치는
+  // 광고 제거 구매 시 배너 자리만큼 위 여백이 커져 보였다. index.html CSS 주석 참고)
+  if (document.body.classList.contains('in-toss') || document.body.classList.contains('in-app')) {
+    // 캔버스가 뷰포트 전체(상태바 뒤까지)를 덮는다. 월드(W×H)는
     // safe area·배너를 뺀 영역에 맞춰 가운데 배치 — 기종 비율 때문에 남는 공간은
     // 몸통 배경이 아니라 캔버스 위 하늘·잔디(drawBackground)가 채워 빈 띠가 없다.
     const vw = window.innerWidth, vh = window.innerHeight;
@@ -1666,7 +1668,7 @@ function fit() {
     view.bottom = (vh - view.oy) / s;
     canvas.style.width = vw + 'px';
     canvas.style.height = vh + 'px';
-    adEl.style.width = '';   // 배너 너비는 CSS 담당 (in-toss는 화면 고정 배치)
+    adEl.style.width = '';   // 배너 너비는 CSS 담당 (전체화면은 화면 하단 고정 배치)
     const dpr = Math.min(3, window.devicePixelRatio || 1);
     const bw = Math.round(vw * dpr), bh = Math.round(vh * dpr);
     if (canvas.width !== bw || canvas.height !== bh) {
@@ -1677,7 +1679,7 @@ function fit() {
     return;
   }
 
-  // 일반 브라우저/구글플레이: 기존 카드 레이아웃 — body 패딩(safe area) 제외 영역에 맞춤
+  // 일반 브라우저: 카드 레이아웃 — body 패딩(safe area) 제외 영역에 맞춤
   const bodyCS = getComputedStyle(document.body);
   const padV = (parseFloat(bodyCS.paddingTop) || 0) + (parseFloat(bodyCS.paddingBottom) || 0);
   const padH = (parseFloat(bodyCS.paddingLeft) || 0) + (parseFloat(bodyCS.paddingRight) || 0);
