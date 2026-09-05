@@ -10,7 +10,7 @@
 (() => {
 'use strict';
 
-const USE_TEST_ADS = true;
+const USE_TEST_ADS = false;
 
 // 구글이 공개한 공식 테스트 광고 단위 (안드로이드용). 아무나 써도 되고 항상 광고가 나온다.
 // https://developers.google.com/admob/android/test-ads
@@ -21,8 +21,8 @@ const TEST = {
 
 // AdMob 콘솔 > 앱 > 광고 단위에서 발급받은 실제 ID
 const REAL = {
-  banner:   '',
-  rewarded: '',
+  banner:   'ca-app-pub-9942492825878908/3297099758',
+  rewarded: 'ca-app-pub-9942492825878908/9479364726',
 };
 
 const picked = USE_TEST_ADS ? TEST : REAL;

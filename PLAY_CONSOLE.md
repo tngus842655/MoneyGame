@@ -108,7 +108,7 @@
 - [ ] **업로드 키 생성·백업** — `scripts/make-upload-key.ps1`.
       잃어버리면 이 패키지는 영영 업데이트할 수 없다
 - [ ] **Play 앱 서명 사용** — 콘솔이 배포용 키를 대신 보관해 준다. 첫 업로드 때 켠다
-- [ ] **AdMob 실제 ID로 교체** (정식 출시 승격 직전)
+- [x] **AdMob 실제 ID로 교체** (2026-09-05 완료, versionCode 7부터 실제 ID)
       - `js/ads-config.js`의 `USE_TEST_ADS = false` + `REAL` 채우기
       - `android/app/src/main/AndroidManifest.xml`의 `APPLICATION_ID`를 실제 앱 ID로
       - 바꾼 뒤 `gradlew.bat bundleRelease`만 다시 돌리면 된다 (웹 자산은 gradle이 알아서 갱신)
@@ -125,6 +125,11 @@
 실제 광고 단위 ID로 바꾼 뒤에는 **본인 기기에서 광고를 클릭하지 말 것.**
 무효 트래픽으로 판정되면 AdMob 계정이 정지되고 수익이 회수된다.
 동작 확인은 `USE_TEST_ADS = true`로 되돌려서 한다.
+
+**AdMob 테스트 기기 등록 (권장).** S23(SM-S911N)의 테스트 기기 ID는
+`DE6DBA9E18CE01059772ACFF2DDCF5C5` (2026-09-05 logcat의 `setTestDeviceIds` 안내에서 채취).
+AdMob 콘솔 → 설정 → 테스트 기기에 추가해 두면 이 폰에서는 실제 ID 빌드라도 항상 테스트
+광고가 나와 무효 트래픽 걱정이 없다. 다른 기기는 logcat에서 `setTestDeviceIds`를 검색하면 된다.
 
 ---
 
@@ -155,6 +160,19 @@ java -jar C:/Workspace/bundletool-all-1.18.3.jar dump manifest --bundle=android/
 
 ---
 
+## 8. 출시 대시보드 권장 조치 (2026-09-05)
+
+| 권장 조치 | 상태 | 처리 |
+| --- | --- | --- |
+| 대형 화면: 크기 조절·방향 제한 삭제 | ✅ versionCode 8 | 매니페스트 `screenOrientation` 삭제. 폰(sw<600dp)만 `MainActivity.applyOrientationPolicy`가 런타임 세로 고정, 태블릿·폴더블은 회전 허용(게임은 `fit()`이 레터박스). `setTextZoom(100)`(글꼴 확대 고정)과는 무관 |
+| R8: 최적화 사용 | ✅ versionCode 8 | `proguard-android.txt` → `proguard-android-optimize.txt` |
+| R8: 리소스 축소 | ✅ versionCode 8 | `shrinkResources true` + `res/raw/keep.xml`(스플래시·코르도바 config) |
+| R8: AGP 9.0 이상 | ⏸ 보류 | Capacitor 8은 AGP 8.13이 상한. Capacitor 9 정식 출시 후 함께 올린다 (진행상황.md 6번) |
+
+> 권장 조치는 정책 위반이 아니다. 남아 있어도 검토·출시에는 영향이 없다.
+
+---
+
 ## 7. 인앱 상품 등록 — 광고 제거
 
 코드 연동은 끝나 있다 (`js/play-iap.js`, cordova-plugin-purchase — 2026-08-30).
@@ -177,6 +195,9 @@ java -jar C:/Workspace/bundletool-all-1.18.3.jar dump manifest --bundle=android/
    테스터 기기): 사이드로드 빌드도 상품·가격 조회는 되지만(버튼 표시됨) 서명이 달라
    **구매 내역(queryPurchases)이 빈 값**으로 와 이미 산 상품의 복원이 안 된다.
    UI·문구 확인은 사이드로드로도 충분하다
+   → **9/5 재실측은 반대였다**: 업로드 키로 서명한 사이드로드 8번 빌드에서 `queryPurchases`가
+   `ad_free`(GPA.3355-…)를 돌려줘 광고 제거가 즉시 복원됐다. 계정+패키지 기준으로 조회되는
+   듯하니 사이드로드에서 복원이 안 된다고 전제하지 말고 실측할 것
 
 검증 시나리오: 홈에 `🚫 광고 제거 · ₩4,000` 버튼 → 구매 → 배너 즉시 사라짐 + 흔들기·제거·부활
 광고 스킵(횟수 제한은 유지) → 앱 삭제·재설치 후 같은 구글 계정으로 소유 자동 복원.

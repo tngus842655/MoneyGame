@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- shrinkResources가 지우면 안 되는 리소스 (2026-09-05).
+     코드에서 R.xxx로 참조하지 않고 이름 문자열로 찾는 것들이다:
+     - splash / splash_icon / splashBackground: 런치 테마(styles.xml)와 캐패시터 스플래시
+     - config: 코르도바 플러그인 목록 (ConfigXmlParser가 getIdentifier("config","xml")로 읽음) -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/splash,@drawable/splash_icon,@color/splashBackground,@xml/config" />

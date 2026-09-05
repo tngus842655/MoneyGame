@@ -74,14 +74,14 @@ android {
         // 1 = 플레이스토어 첫 업로드. 올릴 때마다 versionCode를 1씩 올린다.
         // versionCode는 한 번 쓴 번호를 재사용할 수 없고 Console에서도 고칠 수 없다.
         // versionName은 스토어에 보이는 표시용이라 자유롭게 붙여도 된다.
-        versionCode 6
-        versionName "1.5"
+        versionCode 8
+        versionName "1.7"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
-        aaptOptions {
-             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
-            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
-        }
+    }
+    // 패키징에서 뺄 assets (캐패시터 템플릿의 aaptOptions와 같은 값). aaptOptions는 AGP 9에서
+    // 삭제되므로 같은 뜻의 androidResources로 옮겼다 (2026-09-05).
+    androidResources {
+        ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
     }
     signingConfigs {
         if (keystorePropertiesFile.exists()) {
@@ -108,9 +108,12 @@ android {
             // 넣어 배포하는 규칙(consumerProguardFiles)이 Plugin 상속 클래스를 통째로
             // 지켜 주므로 우리 쪽에 따로 적을 것은 없다. AdMob(play-services-ads)도 같다.
             minifyEnabled true
-            // shrinkResources는 켜지 않는다. 스플래시가 drawable을 이름으로 찾는데
-            // (SplashScreen.java의 getResources().getIdentifier) R8이 그걸 못 보고 지운다.
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // 리소스 축소 (2026-09-05, Play 콘솔 권장 조치). 이름으로 찾는 리소스는
+            // res/raw/keep.xml에 명시해 두었다 (스플래시 drawable, 코르도바 config.xml).
+            shrinkResources true
+            // proguard-android-optimize.txt: 예전 proguard-android.txt는 -dontoptimize가 들어 있어
+            // Play 콘솔이 '최적화가 사용 설정되지 않음'으로 잡았다. AGP 9부터는 optimize 쪽만 허용된다.
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 }
