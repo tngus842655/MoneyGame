@@ -1,15 +1,36 @@
 package com.moneygame.app;
 
 import android.content.pm.ActivityInfo;
+import android.content.pm.PackageInfo;
 import android.content.res.Configuration;
+import android.os.Build;
 import android.os.Bundle;
 import android.webkit.WebSettings;
+import android.webkit.WebView;
+
+import androidx.activity.EdgeToEdge;
 
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
+    // Capacitor 8 SystemBars 플러그인이 시스템 바 인셋을 웹(env(safe-area-inset-*))으로 그대로
+    // 넘겨 주는 최소 웹뷰 버전 (SystemBars.java의 WEBVIEW_VERSION_WITH_SAFE_AREA_FIX와 같은 값)
+    private static final int WEBVIEW_SAFE_AREA_MIN = 140;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // 엣지투엣지 (2026-09-05, Play 콘솔 권장 조치 "일부 사용자에게는 더 넓은 화면이
+        // 표시되지 않을 수 있습니다"). Android 15+(targetSdk 35+)는 시스템이 강제해 이미
+        // 캔버스가 상태바 뒤까지 깔리고 HUD가 safe area만큼 내려온 배치였다(index.html의
+        // --sat/--sab). 이전 버전은 우리가 켜 줘야 같은 화면이 된다. 단 Capacitor 8
+        // SystemBars는 웹뷰 140 미만이면 Android 15 미만에서 인셋을 웹으로 넘기지 않아
+        // HUD가 상태바에 가리므로, 그 조합(구형 웹뷰 + Android 14 이하)은 지금처럼
+        // 시스템 바 안쪽 배치로 둔다. super.onCreate 전에 불러야 데코 뷰가 처음부터
+        // 이 설정으로 만들어진다.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM
+                || webViewMajorVersion() >= WEBVIEW_SAFE_AREA_MIN) {
+            EdgeToEdge.enable(this);
+        }
         super.onCreate(savedInstanceState);
         // 시스템 글꼴 크기 무시 (2026-08-30, NewWorld와 같은 결정) — 웹뷰는 기기 fontScale을
         // textZoom으로 반영해(실기기 제보 1.7배) 홈 문구가 과다 줄바꿈되는 등 레이아웃이
@@ -18,6 +39,20 @@ public class MainActivity extends BridgeActivity {
         settings.setTextZoom(100);
 
         applyOrientationPolicy(getResources().getConfiguration());
+    }
+
+    // 설치된 웹뷰(크롬)의 메이저 버전. 알 수 없으면 0 — 엣지투엣지를 켜지 않는 쪽으로 기운다.
+    private static int webViewMajorVersion() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return 0;
+        try {
+            PackageInfo info = WebView.getCurrentWebViewPackage();
+            if (info != null && info.versionName != null) {
+                return Integer.parseInt(info.versionName.split("\\.")[0]);
+            }
+        } catch (Exception e) {
+            // 웹뷰가 없거나 꺼진 기기 — 어차피 BridgeActivity가 no_webview 화면을 띄운다
+        }
+        return 0;
     }
 
     @Override

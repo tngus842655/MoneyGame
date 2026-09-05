@@ -23,6 +23,11 @@ gradlew.bat bundleRelease
 
 Android Studio는 필요 없다. JDK 21과 위 SDK만 있으면 된다.
 
+> 툴체인(2026-09-05): **Gradle 9.5.1 + AGP 9.3.2** (Play 콘솔 "AGP 9.0 이상" 권장 조치). JDK는 그대로 21
+> (`C:/Program Files/Java/jdk-21.0.12` — 17·25는 실패). Capacitor 8 모듈 호환용 옵트아웃 플래그 3개가
+> `android/gradle.properties`에 주석과 함께 있다. `npm run build:android`(cap sync)가 코르도바 모듈
+> build.gradle을 다시 만들어도 AGP 버전은 루트 것이 우선이라 그대로 동작한다(9/5 빌드로 확인).
+
 ---
 
 ## 처음 한 번만 — 업로드 키 만들기

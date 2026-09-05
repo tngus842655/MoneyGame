@@ -167,7 +167,9 @@ java -jar C:/Workspace/bundletool-all-1.18.3.jar dump manifest --bundle=android/
 | 대형 화면: 크기 조절·방향 제한 삭제 | ✅ versionCode 8 | 매니페스트 `screenOrientation` 삭제. 폰(sw<600dp)만 `MainActivity.applyOrientationPolicy`가 런타임 세로 고정, 태블릿·폴더블은 회전 허용(게임은 `fit()`이 레터박스). `setTextZoom(100)`(글꼴 확대 고정)과는 무관 |
 | R8: 최적화 사용 | ✅ versionCode 8 | `proguard-android.txt` → `proguard-android-optimize.txt` |
 | R8: 리소스 축소 | ✅ versionCode 8 | `shrinkResources true` + `res/raw/keep.xml`(스플래시·코르도바 config) |
-| R8: AGP 9.0 이상 | ⏸ 보류 | Capacitor 8은 AGP 8.13이 상한. Capacitor 9 정식 출시 후 함께 올린다 (진행상황.md 6번) |
+| R8: 최적화된 리소스 축소 + AGP 9.0 이상 | ✅ versionCode 9 | AGP 8.13→**9.3.2**, Gradle **9.5.1** (AGP 9는 최적화 리소스 축소가 기본). Capacitor 8 호환용 옵트아웃 3개는 `android/gradle.properties` 주석 참고 — AGP 10 전(Capacitor 9)까지 정리 |
+| 엣지투엣지 (일부 사용자에게 더 넓은 화면 미표시) | ✅ versionCode 9 | `MainActivity`에서 `EdgeToEdge.enable(this)` — Android 15+는 이미 강제, 14 이하는 웹뷰 140 이상일 때만(Capacitor 8 SystemBars가 인셋을 웹에 넘기는 조건) |
+| 지원 중단 API `LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES` | ⛔ 해결 불가 | 우리 코드 아님 — GMA 25.4.0 전체화면 광고(`ads.internal.overlay.zzag`)·Play Core hsdp 2.1.0(`HsdpShimActivity`) 내부. 최신판도 그대로. 콘솔이 가리키는 `androidx.emoji2.text.b.t`는 R8 합성 클래스. 구글이 SDK를 갱신하면 사라진다 (진행상황.md 9/5 밤 섹션에 추적 과정) |
 
 > 권장 조치는 정책 위반이 아니다. 남아 있어도 검토·출시에는 영향이 없다.
 

@@ -98,33 +98,35 @@ $$;
 
 -- 7) 관리자 통계 조회 -----------------------------------------------------------
 --    관리자가 아니면 예외. 반환 jsonb:
---      daily: 최근 63일 일별 [{day, visitors, shake, clean, revive}] (KST, 빈 날 0)
---      uniq : 주간·월간 순 접속자 {week, last_week, month, last_month}
---             — 일별 접속자를 그냥 더하면 매일 온 사람이 중복으로 세어지므로
---               구간별 distinct는 서버가 계산해 준다. 광고 수는 합산이 가능해
---               클라이언트가 daily에서 더한다.
-create or replace function get_admin_stats(p_player_id uuid)
+--      daily    : 최근 63일 일별 [{day, visitors, shake, clean, revive}] (KST, 빈 날 0)
+--      uniq     : 주간·월간 순 접속자 {week, last_week, month, last_month}
+--                 — 일별 접속자를 그냥 더하면 매일 온 사람이 중복으로 세어지므로
+--                   구간별 distinct는 서버가 계산해 준다. 광고 수는 합산이 가능해
+--                   클라이언트가 daily에서 더한다.
+--      platforms: {toss, android, web} 각각 위와 같은 {daily, uniq} — 플랫폼별 탭
+--                 (js/admin.js). 최상위 daily/uniq는 전 플랫폼 합산이라, platforms를
+--                 모르는 옛 번들(앱인토스 라이브·플레이 8번)도 그대로 동작한다.
+--    한 플랫폼(또는 전체)의 집계는 admin_stats_slice가 만들고, get_admin_stats가
+--    전체 1번 + 플랫폼 3번 불러 합친다. 표가 작아(하루 수백 행) 네 번 훑어도 즉시 끝난다.
+--    admin_stats_slice에는 관리자 검사가 없으므로 anon 실행 권한을 주지 않는다
+--    (맨 아래 revoke) — get_admin_stats(security definer) 안에서만 불린다.
+create or replace function admin_stats_slice(from_day date, p_platform text)
 returns jsonb
-language plpgsql
+language sql
 stable
-security definer
 set search_path = public
 as $$
-declare
-  from_day date := kst_today() - 62;
-begin
-  if not exists (select 1 from admin_keys a where a.player_id = p_player_id) then
-    raise exception 'not admin';
-  end if;
-
-  return jsonb_build_object(
+  select jsonb_build_object(
     'daily', (
       with days as (
         select generate_series(from_day::timestamp, kst_today()::timestamp, interval '1 day')::date as d
       ),
       v as (
         select day as d, count(*)::int as n
-        from visits where day >= from_day group by day
+        from visits
+        where day >= from_day
+          and (p_platform is null or platform = p_platform)
+        group by day
       ),
       a as (
         select (created_at at time zone 'Asia/Seoul')::date as d,
@@ -133,6 +135,7 @@ begin
                count(*) filter (where placement = 'revive')::int as revive
         from ad_views
         where created_at >= (from_day::timestamp at time zone 'Asia/Seoul')
+          and (p_platform is null or platform = p_platform)
         group by 1
       )
       select coalesce(jsonb_agg(jsonb_build_object(
@@ -148,14 +151,41 @@ begin
     ),
     'uniq', jsonb_build_object(
       'week',       (select count(distinct player_id) from visits
-                     where day >= kst_week_start()),
+                     where day >= kst_week_start()
+                       and (p_platform is null or platform = p_platform)),
       'last_week',  (select count(distinct player_id) from visits
-                     where day >= kst_week_start() - 7 and day < kst_week_start()),
+                     where day >= kst_week_start() - 7 and day < kst_week_start()
+                       and (p_platform is null or platform = p_platform)),
       'month',      (select count(distinct player_id) from visits
-                     where day >= kst_month_start()),
+                     where day >= kst_month_start()
+                       and (p_platform is null or platform = p_platform)),
       'last_month', (select count(distinct player_id) from visits
                      where day >= (kst_month_start() - interval '1 month')::date
-                       and day < kst_month_start())
+                       and day < kst_month_start()
+                       and (p_platform is null or platform = p_platform))
+    )
+  )
+$$;
+
+create or replace function get_admin_stats(p_player_id uuid)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  from_day date := kst_today() - 62;
+begin
+  if not exists (select 1 from admin_keys a where a.player_id = p_player_id) then
+    raise exception 'not admin';
+  end if;
+
+  return admin_stats_slice(from_day, null) || jsonb_build_object(
+    'platforms', jsonb_build_object(
+      'toss',    admin_stats_slice(from_day, 'toss'),
+      'android', admin_stats_slice(from_day, 'android'),
+      'web',     admin_stats_slice(from_day, 'web')
     )
   );
 end
@@ -179,6 +209,9 @@ revoke all on function record_visit(uuid, text) from public;
 revoke all on function record_ad_view(uuid, text, text) from public;
 revoke all on function get_admin_stats(uuid) from public;
 revoke all on function is_admin(uuid) from public;
+-- admin_stats_slice는 get_admin_stats 안에서만 불린다. Supabase는 새 함수에 anon·authenticated 실행
+-- 권한을 (public이 아니라) 직접 부여하는 기본 권한이 걸려 있어 public 회수만으로는 안 빠진다 (9/5 확인).
+revoke all on function admin_stats_slice(date, text) from public, anon, authenticated;
 grant execute on function record_visit(uuid, text) to anon, authenticated;
 grant execute on function record_ad_view(uuid, text, text) to anon, authenticated;
 grant execute on function get_admin_stats(uuid) to anon, authenticated;

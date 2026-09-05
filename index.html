@@ -301,6 +301,18 @@
   .statTbl tr:last-child td:last-child { border-radius:0 0 8px 0; }
   .statNote { font-size:11px; color:#9aa3b5; margin:12px 8px 0; line-height:1.5; }
   .adminPid { user-select:text; -webkit-user-select:text; word-break:break-all; color:#5b4636; }
+  /* 플랫폼 탭 (js/admin.js) — 랭킹 탭과 같은 알약. 아이콘은 각 플랫폼 공식 로고
+     (public/icons/toss.png = static.toss.im 토스 로고, google-play.svg = 플레이 삼각형).
+     글자는 좁은 화면(320px)에서 "플레이스토어"가 줄바꿈되지 않도록 vw로 살짝 줄인다 */
+  #adminTabs { display:flex; gap:6px; margin:10px 0 0; }
+  #adminTabs button {
+    flex:1; display:flex; align-items:center; justify-content:center; gap:5px; min-width:0;
+    padding:8px 2px; border-radius:999px; border:none; font-family:inherit; white-space:nowrap;
+    font-size:clamp(11px, 3.5vw, 13px); font-weight:700; background:rgba(255,255,255,.6); color:#8a90a5;
+    cursor:pointer; touch-action:manipulation;
+  }
+  #adminTabs button img { width:16px; height:16px; flex:none; border-radius:4px; }
+  #adminTabs button.active { background:#f78fb3; color:#fff; }
   /* 내 순위(왼쪽) · 닉네임(오른쪽) 한 줄 — 좁은 화면에서는 자연스럽게 줄바꿈 */
   #rankSub { display:flex; align-items:center; justify-content:space-between; gap:4px 10px; flex-wrap:wrap; margin-top:8px; }
   #rankMe { font-size:13px; color:#6b7480; }
@@ -497,6 +509,13 @@
         <div id="adminHead">
           <button id="btnAdminClose" title="뒤로"><img src="public/icons/back.png" alt="뒤로"></button>
           <h2>📊 통계</h2>
+        </div>
+        <!-- 플랫폼 탭 — data-pf는 서버 응답 platforms 키(js/admin.js TABS)와 같다.
+             데이터가 오기 전(로딩·미등록 기기)에는 admin.js가 hidden으로 둔다 -->
+        <div id="adminTabs" class="hidden">
+          <button data-pf="all" class="active">전체</button>
+          <button data-pf="toss"><img src="public/icons/toss.png" alt="">앱인토스</button>
+          <button data-pf="android"><img src="public/icons/google-play.svg" alt="">플레이스토어</button>
         </div>
         <div id="adminBody"></div>
       </div>

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-label="Google Play">
+  <!-- 구글플레이 삼각형 로고 (2022 플랫 버전 색). 왼쪽 파랑 / 위 초록 / 아래 빨강 / 끝 노랑 -->
+  <path fill="#4285F4" d="M3 2.5 13.5 12 3 21.5z"/>
+  <path fill="#34A853" d="M3 2.5 16.53 9.26 13.5 12z"/>
+  <path fill="#EA4335" d="M3 21.5 13.5 12 16.53 14.74z"/>
+  <path fill="#FBBC04" d="M16.53 9.26 22 12 16.53 14.74 13.5 12z"/>
+</svg>

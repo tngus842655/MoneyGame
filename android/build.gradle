@@ -7,7 +7,11 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.13.0'
+        // AGP 9.3 (2026-09-05, Play 콘솔 권장 조치 "AGP 9.0 이상"). Capacitor 8 템플릿은 8.13인데,
+        // 캐패시터·플러그인 모듈이 자기 buildscript에 적어 둔 8.13.0은 여기 버전과 충돌하지 않고
+        // (루트 classpath가 상위 클래스로더라 높은 쪽으로 풀림) 옛 DSL은 gradle.properties의
+        // android.newDsl=false·android.builtInKotlin=false로 받쳐 둔다.
+        classpath 'com.android.tools.build:gradle:9.3.2'
         classpath 'com.google.gms:google-services:4.4.4'
 
         // NOTE: Do not place your application dependencies here; they belong
@@ -25,5 +29,5 @@ allprojects {
 }
 
 task clean(type: Delete) {
-    delete rootProject.buildDir
+    delete rootProject.layout.buildDirectory   // Gradle 9에서 buildDir 프로퍼티가 사라짐
 }
