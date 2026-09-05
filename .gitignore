@@ -6,3 +6,6 @@ dist/
 *.jks
 *.keystore
 android/keystore.properties
+
+# 홍보 영상 원본·편집본 (용량 커서 git에 안 올림, 로컬 보관)
+store/video/
