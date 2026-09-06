@@ -1,0 +1,2 @@
+# 폰(adb shell)에서 그대로 실행하는 스크립트 — CRLF로 체크아웃되면 sh가 깨진다 (2026-09-06)
+tools/device-perf/*.sh text eol=lf
