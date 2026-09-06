@@ -138,7 +138,9 @@
 
   .overlay {
     position:absolute; inset:0; display:flex; overflow-y:auto; border-radius:12px; line-height:normal;
-    background:rgba(214,238,252,.92); backdrop-filter:blur(3px); z-index:10;
+    background:rgba(214,238,252,.92); z-index:10;
+    /* backdrop-filter 블러는 뺐다(발열 대책 2026-09-06): 밑의 캔버스가 매 프레임 바뀌어
+       GPU가 화면 전체를 계속 다시 블러했는데, 92% 불투명이라 있으나 없으나 티가 안 났다 */
   }
   /* 다른 오버레이 위에 겹쳐 뜨는 레이어 (문서 순서와 무관하게 항상 위로) */
   #rank { z-index:20; }

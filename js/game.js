@@ -1280,21 +1280,23 @@ function drawHud() {
   const SCORE_Y = 32;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = `800 22px ${FONT}`;
-  ctx.lineWidth = 5; ctx.lineJoin = 'round';
+  ctx.lineJoin = 'round';
+  if (newRecord) {
+    // 금색 후광. 예전엔 shadowBlur였는데 캔버스 그림자 블러는 매 프레임 소프트웨어
+    // 블러라 발열이 컸다(2026-09-06). 굵기가 다른 반투명 테두리 3겹을 넓은 것부터
+    // 겹쳐 그리면 안쪽일수록 진해져서 비슷한 번짐이 된다. 흰 외곽선은 그 위에 그린다.
+    const glow = 0.5 + 0.5 * Math.sin(hudNow / 180);
+    ctx.strokeStyle = `rgba(255,170,40,${(0.10 + 0.08 * glow).toFixed(3)})`;
+    for (let i = 3; i >= 1; i--) {
+      ctx.lineWidth = 5 + i * (4 + 3 * glow);
+      ctx.strokeText(scoreLabel, W / 2, SCORE_Y);
+    }
+  }
+  ctx.lineWidth = 5;
   ctx.strokeStyle = 'rgba(255,255,255,0.92)';
   ctx.strokeText(scoreLabel, W / 2, SCORE_Y);
-  if (newRecord) {
-    const glow = 0.5 + 0.5 * Math.sin(hudNow / 180);
-    ctx.save();
-    ctx.shadowColor = `rgba(255,170,40,${0.4 + 0.4 * glow})`;
-    ctx.shadowBlur = 10 + 8 * glow;
-    ctx.fillStyle = '#f0a028';
-    ctx.fillText(scoreLabel, W / 2, SCORE_Y);
-    ctx.restore();
-  } else {
-    ctx.fillStyle = '#e0608a';
-    ctx.fillText(scoreLabel, W / 2, SCORE_Y);
-  }
+  ctx.fillStyle = newRecord ? '#f0a028' : '#e0608a';
+  ctx.fillText(scoreLabel, W / 2, SCORE_Y);
 
   if (combo >= 2 && hudNow < comboExpires) {
     ctx.fillStyle = '#ff8c42';
@@ -1422,11 +1424,32 @@ function render(now, dt) {
   }
 }
 
+// 프레임 조절 (발열 대책 2026-09-06)
+// ① 물리·렌더 60fps 상한: rAF는 화면 주사율(90·120Hz)대로 오지만, 마지막으로 처리한
+//    프레임에서 STEP_MS의 3/4(12.5ms)도 안 지났으면 건너뛴다 → 120Hz는 60fps, 90Hz는
+//    45fps, 60Hz는 그대로. 건너뛴 시간은 dt에 그대로 합산되므로 게임오버 2초 판정과
+//    앱인토스 프로모션 플레이 시간(TossPromotion.tick) 같은 시간 누적은 실시간과 같다.
+// ② 대기 상태 감속: 캔버스가 오버레이에 덮이고 게임이 멈춰 있을 때(홈, 팝업이 뜬
+//    게임오버, 광고·재확인 팝업)는 IDLE_MS 간격으로만 돈다. 판정을 매 프레임 하므로
+//    상태가 바뀌면 다음 rAF에서 바로 정상 속도 — 시작·부활·팝업 닫기에 지연 없음.
+//    게임오버는 팝업이 뜨기 전 0.6초 동안 조각이 마저 떨어지는 연출이 있어 팝업이
+//    보인 뒤부터 감속한다.
+const STEP_MS = 1000 / 60;
+const IDLE_MS = 100;
+const overPanel = document.getElementById('over');
+function loopIdle() {
+  return state === 'menu' || adOpen || confirmOpen ||
+    (state === 'over' && !overPanel.classList.contains('hidden'));
+}
 let last = performance.now();
+let frameCount = 0;   // 처리한 프레임 수 (검증용 — __mm.frames)
 function loop(now) {
   requestAnimationFrame(loop);
-  const dt = Math.min(33, now - last);
+  const elapsed = now - last;
+  if (elapsed < (loopIdle() ? IDLE_MS : STEP_MS * 0.75)) return;
   last = now;
+  frameCount++;
+  const dt = Math.min(33, elapsed);
   step(now, dt);
   render(now, dt);
 }
@@ -1669,7 +1692,10 @@ function fit() {
     canvas.style.width = vw + 'px';
     canvas.style.height = vh + 'px';
     adEl.style.width = '';   // 배너 너비는 CSS 담당 (전체화면은 화면 하단 고정 배치)
-    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    // DPR 상한 2 (발열 대책 2026-09-06): 3배 폰은 캔버스가 화면 물리 픽셀 전체 크기라
+    // 매 프레임 칠하는 픽셀이 2배 상한의 2.25배였다. 조각은 실사 PNG를 축소해 그려서
+    // 차이가 거의 없고, 캔버스 글자 가장자리만 미세하게 덜 선명하다.
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
     const bw = Math.round(vw * dpr), bh = Math.round(vh * dpr);
     if (canvas.width !== bw || canvas.height !== bh) {
       canvas.width = bw;
@@ -1693,7 +1719,8 @@ function fit() {
   if (document.body.classList.contains('toss-banner')) adEl.style.width = '';
   else adEl.style.width = W * s + 'px';
   // backing store follows displayed size × current DPR (re-read: zoom/monitor changes)
-  const bs = Math.min(3, s * (window.devicePixelRatio || 1));
+  // DPR은 전체화면 배치와 같이 2 상한 (발열 대책 2026-09-06)
+  const bs = Math.min(3, s * Math.min(2, window.devicePixelRatio || 1));
   const bw = Math.round(W * bs), bh = Math.round(H * bs);
   if (canvas.width !== bw || canvas.height !== bh) {
     canvas.width = bw;
@@ -1741,6 +1768,7 @@ window.__mm = {
   drop: () => drop(performance.now()),
   spawn: (t, x, y) => makePiece(t, x, y),
   bodies: () => moneyBodies(),
+  frames: () => frameCount,   // 처리한 프레임 수 — 60fps 상한·대기 감속 검증용
   tick: (frames = 1) => {
     const now = performance.now();
     for (let i = 0; i < frames; i++) step(now, 16.7);

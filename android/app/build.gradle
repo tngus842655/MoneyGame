@@ -74,8 +74,8 @@ android {
         // 1 = 플레이스토어 첫 업로드. 올릴 때마다 versionCode를 1씩 올린다.
         // versionCode는 한 번 쓴 번호를 재사용할 수 없고 Console에서도 고칠 수 없다.
         // versionName은 스토어에 보이는 표시용이라 자유롭게 붙여도 된다.
-        versionCode 9
-        versionName "1.8"
+        versionCode 11
+        versionName "1.9.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
     // 패키징에서 뺄 assets (캐패시터 템플릿의 aaptOptions와 같은 값). aaptOptions는 AGP 9에서

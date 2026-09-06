@@ -25,13 +25,18 @@ public class MainActivity extends BridgeActivity {
         // --sat/--sab). 이전 버전은 우리가 켜 줘야 같은 화면이 된다. 단 Capacitor 8
         // SystemBars는 웹뷰 140 미만이면 Android 15 미만에서 인셋을 웹으로 넘기지 않아
         // HUD가 상태바에 가리므로, 그 조합(구형 웹뷰 + Android 14 이하)은 지금처럼
-        // 시스템 바 안쪽 배치로 둔다. super.onCreate 전에 불러야 데코 뷰가 처음부터
-        // 이 설정으로 만들어진다.
+        // 시스템 바 안쪽 배치로 둔다.
+        // ⚠️ 반드시 super.onCreate 뒤에 부른다 (2026-09-06 실기기 확인). EdgeToEdge.enable은
+        // window.getDecorView()를 건드려 데코 뷰를 그 시점의 테마로 만들어 버리는데, super.onCreate
+        // 전이면 런치 테마(AppTheme.NoActionBarLaunch = Theme.SplashScreen, 제목 바 있음)로
+        // 만들어지고, 이후 BridgeActivity가 AppTheme.NoActionBar로 바꿔도 이미 만들어진
+        // 데코 뷰는 안 바뀐다 → 화면 위에 "머니 게임" 제목의 시스템 액션바(290px)가 남아
+        // 웹뷰가 그 아래부터 시작했다 (versionCode 9·10·11 초기 빌드, S23·Android 16).
+        super.onCreate(savedInstanceState);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM
                 || webViewMajorVersion() >= WEBVIEW_SAFE_AREA_MIN) {
             EdgeToEdge.enable(this);
         }
-        super.onCreate(savedInstanceState);
         // 시스템 글꼴 크기 무시 (2026-08-30, NewWorld와 같은 결정) — 웹뷰는 기기 fontScale을
         // textZoom으로 반영해(실기기 제보 1.7배) 홈 문구가 과다 줄바꿈되는 등 레이아웃이
         // 깨진다. 게임 UI는 clamp()·vmin의 자체 크기 체계를 쓰므로 100으로 고정한다.

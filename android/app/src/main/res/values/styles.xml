@@ -18,5 +18,9 @@
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
+        <!-- 런치 테마 자체도 제목 바 없음 (2026-09-06). 데코 뷰가 이 테마로 먼저 만들어지는
+             경우(MainActivity 주석 참고)에도 시스템 액션바가 생기지 않게 하는 이중 안전망 -->
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
     </style>
 </resources>

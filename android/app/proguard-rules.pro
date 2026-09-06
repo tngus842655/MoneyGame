@@ -28,3 +28,11 @@
 # 사라지므로 미리 명시해 둔다. 최적화(proguard-android-optimize.txt)를 켠 지금도 무해하다.
 -keep public class * extends org.apache.cordova.CordovaPlugin { <init>(); }
 -keep @com.getcapacitor.annotation.CapacitorPlugin public class * { <init>(); }
+
+# ── Room 데이터베이스 구현의 기본 생성자 (2026-09-06) ─────────────────────────
+# AdMob이 끌어오는 WorkManager 2.7.0의 WorkDatabase_Impl 같은 Room `_Impl` 클래스는
+# Room이 리플렉션(Class.forName + newInstance)으로 만든다. 같이 딸려오는 Room 2.2.5의
+# 소비자 규칙은 `-keep class * extends androidx.room.RoomDatabase`뿐이라, AGP 9의
+# R8 엄격 풀 모드에서 기본 생성자가 지워졌고 versionCode 9·10이 앱 시작 즉시 죽었다
+# ("Failed to create an instance of androidx.work.impl.WorkDatabase", dex 확인).
+-keep class * extends androidx.room.RoomDatabase { <init>(); }
